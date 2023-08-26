@@ -1,0 +1,11 @@
+[package]
+name = "fluent_web_client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+paste = "1.0.14"
+uuid = { version = "1.4.1", features = ["v4", "js"] }
+web-sys = { version = "0.3.64", features = ["Window", "Document", "Element", "console"] }

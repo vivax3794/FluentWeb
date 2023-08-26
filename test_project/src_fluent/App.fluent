@@ -1,0 +1,8 @@
+<template>
+    <h1>Main Component</h1>
+    <Sub/>
+</template>
+
+<define>
+use super::Sub;
+</define>
