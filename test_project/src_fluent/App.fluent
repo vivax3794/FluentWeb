@@ -1,12 +1,17 @@
 <template>
     <input type="number" :keyup="
-    if let Ok(value) = element.value().parse() {
-        *number = value;
+    if let Ok(input) = element.value().parse() {
+        *value = input;
     }
     ">
-    * 2 = {number * 2}
+
+    <br /> {value} * 2 = {*value * 2}
+
 </template>
 
 <data>
-    let mut number: u32 = 0;
+let mut value: i32 = 0;
 </data>
+
+
+

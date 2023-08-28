@@ -140,7 +140,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .iter()
         .map(|stmt| {
             let target = &stmt.target;
-            quote!(let #target = *#target.borrow();)
+            quote!(let #target = #target.borrow();)
         })
         .collect::<Vec<_>>();
     let field_unpacking = quote!(
@@ -206,7 +206,7 @@ fn create_reactive_update_function(
             #unpack_data
 
             let __Fluent_Element = ::fluent_web_client::internal::get_element(&self.root_name, #id);
-            __Fluent_Element.set_text_content(::std::option::Option::Some(&::std::format!(#text, #(::fluent_web_client::internal::display(#expressions)),*)));
+            __Fluent_Element.set_text_content(::std::option::Option::Some(&::std::format!(#text, #(::fluent_web_client::internal::display(&(#expressions))),*)));
         }
     };
     let call = quote!(self.#function_name(););
