@@ -1,3 +1,7 @@
 <template>
-    <h1>Sub component</h1>
+    <button :click="*number += 1">{number}</button>
 </template>
+
+<data>
+    let mut number: u32 = 0;
+</data>
