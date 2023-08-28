@@ -9,12 +9,12 @@ pub struct Component {
     data: __Fluid_Data,
 }
 impl Component {
-    fn update_element___Fluent_UUID_42ac673a_bab7_45eb_bf43_9b0dc25ec055(&self) {
+    fn update_element___Fluent_UUID_e008ad08_fdcc_4dbf_8058_16dd1716146f(&self) {
         let __Fluid_Data { number } = &self.data;
         let number = *number.borrow();
         let __Fluent_Element = ::fluent_web_client::internal::get_element(
             &self.root_name,
-            "__Fluent_UUID_42ac673a_bab7_45eb_bf43_9b0dc25ec055",
+            "__Fluent_UUID_e008ad08_fdcc_4dbf_8058_16dd1716146f",
         );
         __Fluent_Element
             .set_text_content(
@@ -23,12 +23,12 @@ impl Component {
                 ),
             );
     }
-    fn set_event___Fluent_UUID_4c8023ad_f0e5_4ac0_8705_37b3b81107af(&self) {
+    fn set_event___Fluent_UUID_a43c0b8a_6bab_4414_9868_57e339628350(&self) {
         let __Fluent_Component = self.clone();
         use ::fluent_web_client::internal::wasm_bindgen::JsCast;
         let __Fluent_Element = ::fluent_web_client::internal::get_element(
             &self.root_name,
-            "__Fluent_UUID_4c8023ad_f0e5_4ac0_8705_37b3b81107af",
+            "__Fluent_UUID_a43c0b8a_6bab_4414_9868_57e339628350",
         );
         let __Fluent_Element: &::fluent_web_client::internal::web_sys::HtmlButtonElement = __Fluent_Element
             .dyn_ref()
@@ -59,7 +59,7 @@ impl Component {
 }
 impl ::fluent_web_client::internal::Component for Component {
     fn render_init(&self) -> ::std::string::String {
-        "<button id=\"__Fluent_UUID_4c8023ad_f0e5_4ac0_8705_37b3b81107af\"><span id=\"__Fluent_UUID_42ac673a_bab7_45eb_bf43_9b0dc25ec055\"></span></button>\n"
+        "<button id=\"__Fluent_UUID_a43c0b8a_6bab_4414_9868_57e339628350\"><span id=\"__Fluent_UUID_e008ad08_fdcc_4dbf_8058_16dd1716146f\"></span></button>\n"
             .into()
     }
     fn create(root_id: String) -> Self {
@@ -71,10 +71,10 @@ impl ::fluent_web_client::internal::Component for Component {
         }
     }
     fn setup_events(&self) {
-        self.set_event___Fluent_UUID_4c8023ad_f0e5_4ac0_8705_37b3b81107af();
+        self.set_event___Fluent_UUID_a43c0b8a_6bab_4414_9868_57e339628350();
     }
     fn update_all(&self) {
-        self.update_element___Fluent_UUID_42ac673a_bab7_45eb_bf43_9b0dc25ec055();
+        self.update_element___Fluent_UUID_e008ad08_fdcc_4dbf_8058_16dd1716146f();
     }
     fn spawn_sub(&self) {}
 }

@@ -118,6 +118,7 @@ dependencies = [
  "kuchikiki",
  "markup5ever",
  "prettyplease",
+ "proc-macro2",
  "quote",
  "syn 2.0.29",
  "uuid",
@@ -129,6 +130,7 @@ version = "0.1.0"
 dependencies = [
  "paste",
  "uuid",
+ "wasm-bindgen",
  "web-sys",
 ]
 
