@@ -1,6 +1,9 @@
 #![feature(box_patterns)]
 
-use std::{env::current_dir, fs, path::PathBuf};
+use std::{
+    collections::btree_map::Values, env::current_dir, fs,
+    path::PathBuf,
+};
 
 use html5ever::tendril::TendrilSink;
 use quote::quote;
@@ -10,13 +13,23 @@ fn main() -> anyhow::Result<()> {
     let src_fluent = root_dir.join("src_fluent");
     let src = root_dir.join("src");
 
+    clear_out_src_dir(&src)?;
     process_dir(src_fluent, src)?;
 
     Ok(())
 }
 
+fn clear_out_src_dir(src: &PathBuf) -> anyhow::Result<()> {
+    fs::remove_dir_all(src)?;
+    fs::create_dir(src)?;
+
+    Ok(())
+}
+
 fn process_dir(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
-    for file in fs::read_dir(&source)?.collect::<Result<Vec<_>, _>>()? {
+    for file in
+        fs::read_dir(&source)?.collect::<Result<Vec<_>, _>>()?
+    {
         let name = file.file_name().to_str().unwrap().to_string();
         if file.file_type()?.is_dir() {
             let dst = dst.join(name.clone());
@@ -40,10 +53,18 @@ fn process_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
             fs::copy(source, dst)?;
         }
         "fluent" => {
-            let name = dst.file_name().unwrap().to_str().unwrap().to_string();
+            let name = dst
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
             let component_name = name.split('.').next().unwrap();
             let component_file = format!("{component_name}Module.rs");
-            compile_fluent_file(source, dst.with_file_name(component_file))?;
+            compile_fluent_file(
+                source,
+                dst.with_file_name(component_file),
+            )?;
         }
         _ => (),
     }
@@ -51,7 +72,10 @@ fn process_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn find_top_level_tag<'a>(document: &'a str, tag: &str) -> Option<&'a str> {
+fn find_top_level_tag<'a>(
+    document: &'a str,
+    tag: &str,
+) -> Option<&'a str> {
     let open_tag = format!("<{tag}>");
     let close_tag = format!("</{tag}>");
 
@@ -76,7 +100,8 @@ struct DataSectionInfo {
 }
 
 fn parse_data_segement(data_section: &str) -> Vec<DataStatement> {
-    let data_block_parsed: syn::Block = syn::parse_str(&format!("{{{data_section}}}")).unwrap();
+    let data_block_parsed: syn::Block =
+        syn::parse_str(&format!("{{{data_section}}}")).unwrap();
 
     data_block_parsed
         .stmts
@@ -113,7 +138,8 @@ fn parse_data_segement(data_section: &str) -> Vec<DataStatement> {
 }
 
 fn compile_data_section(source_content: &str) -> DataSectionInfo {
-    let data_content = find_top_level_tag(source_content, "data").unwrap_or("");
+    let data_content =
+        find_top_level_tag(source_content, "data").unwrap_or("");
     let data_statements = parse_data_segement(data_content);
 
     let struct_fields: Vec<_> = data_statements
@@ -168,17 +194,19 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
 }
 
 fn get_html_body(source_content: &str) -> kuchikiki::NodeRef {
-    let template_content = find_top_level_tag(source_content, "template").unwrap_or("");
-    let parsed_html = kuchikiki::parse_html_with_options(kuchikiki::ParseOpts {
-        tree_builder: html5ever::tree_builder::TreeBuilderOpts {
-            drop_doctype: true,
+    let template_content =
+        find_top_level_tag(source_content, "template").unwrap_or("");
+    let parsed_html =
+        kuchikiki::parse_html_with_options(kuchikiki::ParseOpts {
+            tree_builder: html5ever::tree_builder::TreeBuilderOpts {
+                drop_doctype: true,
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    })
-    .from_utf8()
-    .read_from(&mut template_content.as_bytes())
-    .unwrap();
+        })
+        .from_utf8()
+        .read_from(&mut template_content.as_bytes())
+        .unwrap();
 
     parsed_html
         .select("body")
@@ -205,8 +233,11 @@ fn create_reactive_update_function(
         fn #function_name(&self) {
             #unpack_data
 
-            let __Fluent_Element = ::fluent_web_client::internal::get_element(&self.root_name, #id);
-            __Fluent_Element.set_text_content(::std::option::Option::Some(&::std::format!(#text, #(::fluent_web_client::internal::display(&(#expressions))),*)));
+            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #id);
+            for __Fluent_Element in __Fluent_Elements.into_iter() {
+                let __Fluent_Text = &::std::format!(#text, #(::fluent_web_client::internal::display(&(#expressions))),*);
+                __Fluent_Element.set_text_content(::std::option::Option::Some(__Fluent_Text));
+            }
         }
     };
     let call = quote!(self.#function_name(););
@@ -214,7 +245,10 @@ fn create_reactive_update_function(
     (function_def, call)
 }
 
-fn get_or_set_id(attributes: &mut kuchikiki::Attributes, new_id: String) -> String {
+fn get_or_set_id(
+    attributes: &mut kuchikiki::Attributes,
+    new_id: String,
+) -> String {
     if let Some(id) = attributes.get("id") {
         id.to_string()
     } else {
@@ -223,20 +257,38 @@ fn get_or_set_id(attributes: &mut kuchikiki::Attributes, new_id: String) -> Stri
     }
 }
 
+fn add_class(attributes: &mut kuchikiki::Attributes, class: &str) {
+    let current_class =
+        if let Some(value) = attributes.get_mut("class") {
+            value
+        } else {
+            attributes.insert("class", String::new());
+            attributes.get_mut("class").unwrap()
+        };
+
+    current_class.push(' ');
+    current_class.push_str(class);
+}
+
 struct SubComponentData {
     id: String,
     component_name: syn::Path,
 }
 
-fn find_sub_components_and_replace_with_div(node: kuchikiki::NodeRef) -> Vec<SubComponentData> {
+fn find_sub_components_and_replace_with_div(
+    node: kuchikiki::NodeRef,
+) -> Vec<SubComponentData> {
     use kuchikiki::NodeData;
     match node.data() {
-        NodeData::Element(data) if &data.name.local == "component" => {
+        NodeData::Element(data)
+            if &data.name.local == "component" =>
+        {
             let attributes = data.attributes.borrow();
             let component_name = attributes
                 .get("src")
                 .expect("component tag needs a src as a rust path to point to the sub component");
-            let component_name = syn::parse_str(component_name).unwrap();
+            let component_name =
+                syn::parse_str(component_name).unwrap();
             let id = uuid();
 
             use markup5ever::namespace_url;
@@ -289,7 +341,9 @@ struct ReactiveText {
     expressions: Vec<syn::Expr>,
 }
 
-fn find_reactive_nodes_and_replace_with_span(node: kuchikiki::NodeRef) -> Vec<ReactiveText> {
+fn find_reactive_nodes_and_replace_with_span(
+    node: kuchikiki::NodeRef,
+) -> Vec<ReactiveText> {
     use kuchikiki::NodeData;
     match node.data() {
         NodeData::Element(_) => node
@@ -342,7 +396,7 @@ fn find_reactive_nodes_and_replace_with_span(node: kuchikiki::NodeRef) -> Vec<Re
                 [(
                     kuchikiki::ExpandedName::new(
                         markup5ever::ns!(),
-                        markup5ever::local_name!("id"),
+                        markup5ever::local_name!("class"),
                     ),
                     kuchikiki::Attribute {
                         prefix: None,
@@ -376,7 +430,9 @@ struct EventListener {
     element: String,
 }
 
-fn find_event_listeners_and_set_id(node: kuchikiki::NodeRef) -> Vec<EventListener> {
+fn find_event_listeners_and_set_id(
+    node: kuchikiki::NodeRef,
+) -> Vec<EventListener> {
     use kuchikiki::NodeData;
     match node.data() {
         NodeData::Element(data) => {
@@ -388,7 +444,11 @@ fn find_event_listeners_and_set_id(node: kuchikiki::NodeRef) -> Vec<EventListene
                 .iter()
                 .filter_map(|(name, code)| {
                     if name.local.starts_with(':') {
-                        let event = name.local.strip_prefix(':').unwrap().to_string();
+                        let event = name
+                            .local
+                            .strip_prefix(':')
+                            .unwrap()
+                            .to_string();
                         let code = code.value.clone();
                         Some((event, code))
                     } else {
@@ -406,7 +466,9 @@ fn find_event_listeners_and_set_id(node: kuchikiki::NodeRef) -> Vec<EventListene
                     .map(|(event, code)| {
                         attributes.remove(format!(":{event}"));
 
-                        let code = syn::parse_str(&format!("{{{code}}}")).unwrap();
+                        let code =
+                            syn::parse_str(&format!("{{{code}}}"))
+                                .unwrap();
                         EventListener {
                             id: id.clone(),
                             handler: event,
@@ -419,7 +481,10 @@ fn find_event_listeners_and_set_id(node: kuchikiki::NodeRef) -> Vec<EventListene
                 vec![]
             };
 
-            events_for_this.extend(node.children().flat_map(find_event_listeners_and_set_id));
+            events_for_this.extend(
+                node.children()
+                    .flat_map(find_event_listeners_and_set_id),
+            );
             events_for_this
         }
         _ => vec![],
@@ -439,8 +504,11 @@ fn compile_event_listener(
     let function_name = quote::format_ident!("set_event_{}", id);
 
     let mut c = element.chars();
-    let element_name_cap = c.next().unwrap().to_ascii_uppercase().to_string() + c.as_str();
-    let element_type = quote::format_ident!("Html{}Element", element_name_cap);
+    let element_name_cap =
+        c.next().unwrap().to_ascii_uppercase().to_string()
+            + c.as_str();
+    let element_type =
+        quote::format_ident!("Html{}Element", element_name_cap);
 
     let event_type = match handler.as_str() {
         "keydown" => "Keyboard",
@@ -541,7 +609,9 @@ struct ConditionalAttribute {
     condition: syn::Expr,
 }
 
-fn find_conditional_attributes_and_set_id(node: kuchikiki::NodeRef) -> Vec<ConditionalAttribute> {
+fn find_conditional_attributes_and_set_id(
+    node: kuchikiki::NodeRef,
+) -> Vec<ConditionalAttribute> {
     use kuchikiki::NodeData;
     match node.data() {
         NodeData::Element(data) => {
@@ -551,7 +621,10 @@ fn find_conditional_attributes_and_set_id(node: kuchikiki::NodeRef) -> Vec<Condi
                 .iter()
                 .filter_map(|(name, content)| {
                     if name.local.starts_with('?') {
-                        Some((name.local.to_string(), content.value.clone()))
+                        Some((
+                            name.local.to_string(),
+                            content.value.clone(),
+                        ))
                     } else {
                         None
                     }
@@ -562,7 +635,7 @@ fn find_conditional_attributes_and_set_id(node: kuchikiki::NodeRef) -> Vec<Condi
                 vec![]
             } else {
                 let id = uuid();
-                let id = get_or_set_id(&mut attributes, id);
+                add_class(&mut attributes, &id);
 
                 conditionals
                     .into_iter()
@@ -570,7 +643,10 @@ fn find_conditional_attributes_and_set_id(node: kuchikiki::NodeRef) -> Vec<Condi
                         attributes.remove(name.clone());
 
                         let code = syn::parse_str(&code).unwrap();
-                        let name = name.strip_prefix('?').unwrap().to_string();
+                        let name = name
+                            .strip_prefix('?')
+                            .unwrap()
+                            .to_string();
 
                         ConditionalAttribute {
                             id: id.clone(),
@@ -581,10 +657,10 @@ fn find_conditional_attributes_and_set_id(node: kuchikiki::NodeRef) -> Vec<Condi
                     .collect()
             };
 
-            this_element.extend(
-                node.children()
-                    .flat_map(find_conditional_attributes_and_set_id),
-            );
+            this_element
+                .extend(node.children().flat_map(
+                    find_conditional_attributes_and_set_id,
+                ));
             this_element
         }
         _ => vec![],
@@ -601,17 +677,20 @@ fn compile_conditional_stmt(
         condition,
     } = attribute;
 
-    let function_name = quote::format_ident!("update_attribute_{}", id);
+    let function_name =
+        quote::format_ident!("update_attribute_{}", id);
 
     let update_def = quote!(
         fn #function_name(&self) {
             #unpack
 
-            let __Fluent_Element = ::fluent_web_client::internal::get_element(&self.root_name, #id);
-            if #condition {
-                __Fluent_Element.set_attribute(#attribute, "").unwrap();
-            } else {
-                __Fluent_Element.remove_attribute(#attribute).unwrap();
+            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #id);
+            for __Fluent_Element in __Fluent_Elements.into_iter() {
+                if #condition {
+                    __Fluent_Element.set_attribute(#attribute, "").unwrap();
+                } else {
+                    __Fluent_Element.remove_attribute(#attribute).unwrap();
+                }
             }
         }
     );
@@ -620,7 +699,10 @@ fn compile_conditional_stmt(
     (update_def, update_call)
 }
 
-fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
+fn compile_fluent_file(
+    source: PathBuf,
+    dst: PathBuf,
+) -> anyhow::Result<()> {
     let source_content = fs::read_to_string(source)?;
 
     let DataSectionInfo {
@@ -630,41 +712,61 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
         unpack_mut,
     } = compile_data_section(&source_content);
 
-    let define_content = find_top_level_tag(&source_content, "define").unwrap_or("");
+    let define_content =
+        find_top_level_tag(&source_content, "define").unwrap_or("");
     let define_parsed: syn::File = syn::parse_str(define_content)?;
 
     let body_html = get_html_body(&source_content);
 
-    let reactive_element_info = find_reactive_nodes_and_replace_with_span(body_html.clone());
-    let (reactive_update_defs, reactive_update_calls): (Vec<_>, Vec<_>) = reactive_element_info
+    let reactive_element_info =
+        find_reactive_nodes_and_replace_with_span(body_html.clone());
+    let (reactive_update_defs, reactive_update_calls): (
+        Vec<_>,
+        Vec<_>,
+    ) = reactive_element_info
         .iter()
-        .map(|info| create_reactive_update_function(info, &unpack_data))
+        .map(|info| {
+            create_reactive_update_function(info, &unpack_data)
+        })
         .unzip();
 
-    let subcomponent_info = find_sub_components_and_replace_with_div(body_html.clone());
-    let (subcomponent_defs, subcomponent_calls): (Vec<_>, Vec<_>) = subcomponent_info
-        .iter()
-        .map(create_spawn_and_spawn_call_for_subcomponent)
-        .unzip();
+    let subcomponent_info =
+        find_sub_components_and_replace_with_div(body_html.clone());
+    let (subcomponent_defs, subcomponent_calls): (Vec<_>, Vec<_>) =
+        subcomponent_info
+            .iter()
+            .map(create_spawn_and_spawn_call_for_subcomponent)
+            .unzip();
 
-    let event_info = find_event_listeners_and_set_id(body_html.clone());
-    let (event_set_defs, event_set_calls): (Vec<_>, Vec<_>) = event_info
-        .iter()
-        .map(|event| compile_event_listener(event, &unpack_mut))
-        .unzip();
+    let event_info =
+        find_event_listeners_and_set_id(body_html.clone());
+    let (event_set_defs, event_set_calls): (Vec<_>, Vec<_>) =
+        event_info
+            .iter()
+            .map(|event| compile_event_listener(event, &unpack_mut))
+            .unzip();
 
-    let conditional_info = find_conditional_attributes_and_set_id(body_html.clone());
-    let (conditional_defs, conditional_calls): (Vec<_>, Vec<_>) = conditional_info
-        .iter()
-        .map(|info| compile_conditional_stmt(info, &unpack_data))
-        .unzip();
+    let conditional_info =
+        find_conditional_attributes_and_set_id(body_html.clone());
+    let (conditional_defs, conditional_calls): (Vec<_>, Vec<_>) =
+        conditional_info
+            .iter()
+            .map(|info| compile_conditional_stmt(info, &unpack_data))
+            .unzip();
 
     let mut html_content = Vec::new();
-    html5ever::serialize(&mut html_content, &body_html, Default::default()).unwrap();
+    html5ever::serialize(
+        &mut html_content,
+        &body_html,
+        Default::default(),
+    )
+    .unwrap();
     let html_content = String::from_utf8(html_content).unwrap();
     dbg!(html_content.clone());
 
     let component_source: syn::File = syn::parse_quote!(
+        #![allow(warnings)]
+
         use ::fluent_web_client::internal::web_sys::*;
 
         #define_parsed
@@ -735,7 +837,10 @@ mod tests {
     fn test_find() {
         const CONTENT: &str = "<a>Hello World</a> <b>123</b>";
 
-        assert_eq!("Hello World", find_top_level_tag(CONTENT, "a").unwrap());
+        assert_eq!(
+            "Hello World",
+            find_top_level_tag(CONTENT, "a").unwrap()
+        );
         assert_eq!("123", find_top_level_tag(CONTENT, "b").unwrap())
     }
 }

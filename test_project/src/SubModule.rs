@@ -1,7 +1,8 @@
+#![allow(warnings)]
 use ::fluent_web_client::internal::web_sys::*;
 #[derive(Clone)]
 struct __Fluid_Data {
-    number: ::std::rc::Rc<::std::cell::RefCell<u32>>,
+    counter: ::std::rc::Rc<::std::cell::RefCell<u32>>,
 }
 #[derive(Clone)]
 pub struct Component {
@@ -9,28 +10,27 @@ pub struct Component {
     data: __Fluid_Data,
 }
 impl Component {
-    fn update_element___Fluent_UUID_fb0e1028_6594_4f3c_b898_d1462ddda27f(&self) {
-        let __Fluid_Data { number } = &self.data;
-        let number = number.borrow();
-        let __Fluent_Element = ::fluent_web_client::internal::get_element(
+    fn update_element___Fluent_UUID_0a1952d6_62cb_4aca_893c_2668233c7b18(&self) {
+        let __Fluid_Data { counter } = &self.data;
+        let counter = counter.borrow();
+        let __Fluent_Elements = ::fluent_web_client::internal::get_elements(
             &self.root_name,
-            "__Fluent_UUID_fb0e1028_6594_4f3c_b898_d1462ddda27f",
+            "__Fluent_UUID_0a1952d6_62cb_4aca_893c_2668233c7b18",
         );
-        __Fluent_Element
-            .set_text_content(
-                ::std::option::Option::Some(
-                    &::std::format!(
-                        "{}", ::fluent_web_client::internal::display(& (number))
-                    ),
-                ),
+        for __Fluent_Element in __Fluent_Elements.into_iter() {
+            let __Fluent_Text = &::std::format!(
+                "{}", ::fluent_web_client::internal::display(& (counter))
             );
+            __Fluent_Element
+                .set_text_content(::std::option::Option::Some(__Fluent_Text));
+        }
     }
-    fn set_event___Fluent_UUID_28c17109_bd9a_4edd_b032_7cf502f68631(&self) {
+    fn set_event___Fluent_UUID_91aa6be5_9e36_4500_8e70_00a238792506(&self) {
         let __Fluent_Component = self.clone();
         use ::fluent_web_client::internal::wasm_bindgen::JsCast;
         let __Fluent_Element = ::fluent_web_client::internal::get_element(
             &self.root_name,
-            "__Fluent_UUID_28c17109_bd9a_4edd_b032_7cf502f68631",
+            "__Fluent_UUID_91aa6be5_9e36_4500_8e70_00a238792506",
         );
         let __Fluent_Element: &::fluent_web_client::internal::web_sys::HtmlButtonElement = __Fluent_Element
             .dyn_ref()
@@ -43,9 +43,9 @@ impl Component {
                 .dyn_ref::<::fluent_web_client::internal::web_sys::MouseEvent>()
                 .unwrap();
             {
-                let __Fluid_Data { number } = &__Fluent_Component.data;
-                let mut number = number.borrow_mut();
-                { *number += 1 };
+                let __Fluid_Data { counter } = &__Fluent_Component.data;
+                let mut counter = counter.borrow_mut();
+                { *counter += 1 };
             }
             use ::fluent_web_client::internal::Component;
             __Fluent_Component.update_all();
@@ -61,22 +61,22 @@ impl Component {
 }
 impl ::fluent_web_client::internal::Component for Component {
     fn render_init(&self) -> ::std::string::String {
-        "<button id=\"__Fluent_UUID_28c17109_bd9a_4edd_b032_7cf502f68631\"><span id=\"__Fluent_UUID_fb0e1028_6594_4f3c_b898_d1462ddda27f\"></span></button>\n"
+        "<button id=\"__Fluent_UUID_91aa6be5_9e36_4500_8e70_00a238792506\"><span class=\"__Fluent_UUID_0a1952d6_62cb_4aca_893c_2668233c7b18\"></span></button>\n"
             .into()
     }
     fn create(root_id: String) -> Self {
         Self {
             root_name: root_id,
             data: __Fluid_Data {
-                number: ::std::rc::Rc::new(::std::cell::RefCell::new(0)),
+                counter: ::std::rc::Rc::new(::std::cell::RefCell::new(0)),
             },
         }
     }
     fn setup_events(&self) {
-        self.set_event___Fluent_UUID_28c17109_bd9a_4edd_b032_7cf502f68631();
+        self.set_event___Fluent_UUID_91aa6be5_9e36_4500_8e70_00a238792506();
     }
     fn update_all(&self) {
-        self.update_element___Fluent_UUID_fb0e1028_6594_4f3c_b898_d1462ddda27f();
+        self.update_element___Fluent_UUID_0a1952d6_62cb_4aca_893c_2668233c7b18();
     }
     fn spawn_sub(&self) {}
 }

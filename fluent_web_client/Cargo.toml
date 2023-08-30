@@ -15,6 +15,7 @@ features = [
     # Manual
     "Window",
     "Document",
+    "NodeList",
     "HtmlElement",
     "Element",
     "console",

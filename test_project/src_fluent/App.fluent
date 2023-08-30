@@ -1,17 +1,9 @@
 <template>
-    <input type="number" :keyup="
-    if let Ok(input) = element.value().parse() {
-        *value = input;
-    }
-    ">
-
-    <br /> {value} * 2 = {*value * 2}
+    <component src="Wrapper"></component>
+    <component src="Wrapper"></component>
+    <component src="Wrapper"></component>
 
 </template>
-
-<data>
-let mut value: i32 = 0;
-</data>
-
-
-
+<define>
+use super::*;
+</define>

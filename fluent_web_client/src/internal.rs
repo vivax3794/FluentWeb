@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display};
 
 pub use wasm_bindgen;
+use wasm_bindgen::JsCast;
 pub use web_sys;
 
 pub trait Component {
@@ -17,7 +18,10 @@ pub fn uuid() -> String {
     format!("__Fluent_UUID_{id}")
 }
 
-pub fn get_element(component_id: &str, element_id: &str) -> web_sys::Element {
+pub fn get_element(
+    component_id: &str,
+    element_id: &str,
+) -> web_sys::Element {
     let selector = ::std::format!(
         "#{} #{}:not(#{} .__Fluent_Component *)",
         component_id,
@@ -29,17 +33,36 @@ pub fn get_element(component_id: &str, element_id: &str) -> web_sys::Element {
     document.query_selector(&selector).unwrap().unwrap()
 }
 
-pub trait FormatDisplay {
-    fn format_display(&self) -> String;
+pub fn get_elements(
+    component_id: &str,
+    element_id: &str,
+) -> Vec<web_sys::Element> {
+    let selector = ::std::format!(
+        "#{} .{}:not(#{} .__Fluent_Component *)",
+        component_id,
+        element_id,
+        component_id
+    );
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let node_list = document.query_selector_all(&selector).unwrap();
+
+    let length = node_list.length() as usize;
+    let mut elements = Vec::with_capacity(length);
+    for i in 0..length {
+        elements.push(
+            node_list
+                .item(i as u32)
+                .unwrap()
+                .dyn_into::<web_sys::Element>()
+                .unwrap(),
+        );
+    }
+    elements
 }
 
-impl<T> FormatDisplay for T
-where
-    T: Debug + Display,
-{
-    fn format_display(&self) -> String {
-        format!("{}", self)
-    }
+pub trait FormatDisplay {
+    fn format_display(&self) -> String;
 }
 
 impl<T> FormatDisplay for T
@@ -48,6 +71,15 @@ where
 {
     default fn format_display(&self) -> String {
         format!("{:?}", self)
+    }
+}
+
+impl<T> FormatDisplay for T
+where
+    T: Debug + Display,
+{
+    fn format_display(&self) -> String {
+        format!("{}", self)
     }
 }
 

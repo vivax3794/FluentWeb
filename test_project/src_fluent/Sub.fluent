@@ -1,7 +1,7 @@
 <template>
-    <button :click="*number += 1">{number}</button>
+    <button :click="*counter += 1">{counter}</button>
 </template>
 
 <data>
-    let mut number: u32 = 0;
+let mut counter: u32 = 0;
 </data>
