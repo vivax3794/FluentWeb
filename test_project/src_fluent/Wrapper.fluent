@@ -1,7 +1,0 @@
-<template>
-    <component src="Sub"></component>
-</template>
-
-<define>
-use super::Sub;
-</define>

@@ -1,7 +1,6 @@
 use fluent_web_client::component;
 
 component!(App);
-component!(Wrapper);
 component!(Sub);
 
 fn main() {

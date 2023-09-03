@@ -9,6 +9,11 @@ edition = "2021"
 anyhow = "1.0.75"
 html5ever = "0.26.0"
 kuchikiki = "0.8.2"
+lightningcss = { version = "1.0.0-alpha.45", default-features = false, features = [
+    "visitor",
+    "rayon",
+    "grid",
+] }
 markup5ever = "0.11.0"
 prettyplease = "0.2.12"
 proc-macro2 = "1.0.66"

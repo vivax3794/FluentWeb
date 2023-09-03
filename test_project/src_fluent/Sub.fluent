@@ -1,7 +1,9 @@
 <template>
-    <button :click="*counter += 1">{counter}</button>
+    <p>Sub</p>
 </template>
 
-<data>
-let mut counter: u32 = 0;
-</data>
+<style>
+p {
+    background-color: red;
+}
+</style>

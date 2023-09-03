@@ -6,12 +6,12 @@ pub mod internal;
 pub fn render_component<C: internal::Component>(mount_point: &str) {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
-    let body = document.get_element_by_id(mount_point).unwrap();
+    let element = document.get_element_by_id(mount_point).unwrap();
 
-    body.set_class_name("__Fluent_Component");
+    element.class_list().add_1("__Fluent_Component").unwrap();
 
     let component = C::create(mount_point.to_owned());
-    body.set_inner_html(&component.render_init());
+    element.set_inner_html(&component.render_init());
     component.setup_events();
     component.spawn_sub();
     component.update_all();

@@ -1,9 +1,10 @@
 <template>
-    <component src="Wrapper"></component>
-    <component src="Wrapper"></component>
-    <component src="Wrapper"></component>
-
+    <p>Main</p>
+    <component src="super::Sub"></component>
 </template>
-<define>
-use super::*;
-</define>
+
+<style>
+p {
+    color: blue;
+}
+</style>

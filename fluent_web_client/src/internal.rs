@@ -35,12 +35,12 @@ pub fn get_element(
 
 pub fn get_elements(
     component_id: &str,
-    element_id: &str,
+    selector: &str,
 ) -> Vec<web_sys::Element> {
     let selector = ::std::format!(
-        "#{} .{}:not(#{} .__Fluent_Component *)",
+        "#{} {}:not(#{} .__Fluent_Component *)",
         component_id,
-        element_id,
+        selector,
         component_id
     );
     let window = web_sys::window().unwrap();
@@ -69,6 +69,7 @@ impl<T> FormatDisplay for T
 where
     T: Debug,
 {
+    #[inline(always)]
     default fn format_display(&self) -> String {
         format!("{:?}", self)
     }
@@ -78,11 +79,13 @@ impl<T> FormatDisplay for T
 where
     T: Debug + Display,
 {
+    #[inline(always)]
     fn format_display(&self) -> String {
         format!("{}", self)
     }
 }
 
+#[inline(always)]
 pub fn display<T: FormatDisplay>(value: T) -> String {
     value.format_display()
 }

@@ -1,9 +1,6 @@
 #![feature(box_patterns)]
 
-use std::{
-    collections::btree_map::Values, env::current_dir, fs,
-    path::PathBuf,
-};
+use std::{env::current_dir, fs, path::PathBuf};
 
 use html5ever::tendril::TendrilSink;
 use quote::quote;
@@ -22,6 +19,8 @@ fn main() -> anyhow::Result<()> {
 fn clear_out_src_dir(src: &PathBuf) -> anyhow::Result<()> {
     fs::remove_dir_all(src)?;
     fs::create_dir(src)?;
+
+    fs::File::create(src.join("main.rs")).unwrap();
 
     Ok(())
 }
@@ -229,11 +228,12 @@ fn create_reactive_update_function(
 
     let function_name = quote::format_ident!("update_element_{}", id);
 
+    let selector = format!(".{}", id);
     let function_def = quote! {
         fn #function_name(&self) {
             #unpack_data
 
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #id);
+            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 let __Fluent_Text = &::std::format!(#text, #(::fluent_web_client::internal::display(&(#expressions))),*);
                 __Fluent_Element.set_text_content(::std::option::Option::Some(__Fluent_Text));
@@ -243,18 +243,6 @@ fn create_reactive_update_function(
     let call = quote!(self.#function_name(););
 
     (function_def, call)
-}
-
-fn get_or_set_id(
-    attributes: &mut kuchikiki::Attributes,
-    new_id: String,
-) -> String {
-    if let Some(id) = attributes.get("id") {
-        id.to_string()
-    } else {
-        attributes.insert("id", new_id.clone());
-        new_id
-    }
 }
 
 fn add_class(attributes: &mut kuchikiki::Attributes, class: &str) {
@@ -295,7 +283,8 @@ fn find_sub_components_and_replace_with_div(
             let mut attributes = attributes.clone();
 
             attributes.remove("src");
-            let id = get_or_set_id(&mut attributes, id);
+            add_class(&mut attributes, &id);
+            add_class(&mut attributes, "__Fluent_Needs_Init");
 
             let div = kuchikiki::NodeRef::new_element(
                 html5ever::QualName {
@@ -326,9 +315,15 @@ fn create_spawn_and_spawn_call_for_subcomponent(
 
     let function_name = quote::format_ident!("spawn_component_{id}");
 
+    let selector = format!(".{}.__Fluent_Needs_Init", id);
     let function_def = quote!(
         fn #function_name(&self) {
-            ::fluent_web_client::render_component::<#component_name>(#id);
+            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector);
+            for __Fluent_Element in __Fluent_Elements.into_iter() {
+                let __Fluent_Id = ::fluent_web_client::internal::uuid();
+                __Fluent_Element.set_id(&__Fluent_Id);
+                ::fluent_web_client::render_component::<#component_name>(&__Fluent_Id);
+            }
         }
     );
     let function_call = quote!(self.#function_name(););
@@ -430,7 +425,7 @@ struct EventListener {
     element: String,
 }
 
-fn find_event_listeners_and_set_id(
+fn find_event_listeners_and_set_class(
     node: kuchikiki::NodeRef,
 ) -> Vec<EventListener> {
     use kuchikiki::NodeData;
@@ -459,7 +454,7 @@ fn find_event_listeners_and_set_id(
 
             let mut events_for_this = if !events.is_empty() {
                 let id = uuid();
-                let id = get_or_set_id(&mut attributes, id);
+                add_class(&mut attributes, &id);
 
                 events
                     .into_iter()
@@ -483,7 +478,7 @@ fn find_event_listeners_and_set_id(
 
             events_for_this.extend(
                 node.children()
-                    .flat_map(find_event_listeners_and_set_id),
+                    .flat_map(find_event_listeners_and_set_class),
             );
             events_for_this
         }
@@ -511,90 +506,90 @@ fn compile_event_listener(
         quote::format_ident!("Html{}Element", element_name_cap);
 
     let event_type = match handler.as_str() {
+        // Window Events
+        "afterprint" => "Window",
+        "beforeprint" => "Window",
+        "load" => "Window",
+        "resize" => "Window",
+
+        // Form Events
+        "blur" => "Form",
+        "change" => "Form",
+        "focus" => "Form",
+        "input" => "Form",
+        "submit" => "Form",
+
+        // Keyboard Events
         "keydown" => "Keyboard",
-        "keyup" => "Keyboard",
         "keypress" => "Keyboard",
+        "keyup" => "Keyboard",
+
+        // Mouse Events
         "click" => "Mouse",
         "dblclick" => "Mouse",
         "mousedown" => "Mouse",
-        "mouseup" => "Mouse",
         "mousemove" => "Mouse",
-        "mouseover" => "Mouse",
         "mouseout" => "Mouse",
-        "mouseenter" => "Mouse",
-        "mouseleave" => "Mouse",
-        "contextmenu" => "Mouse",
-        "wheel" => "Mouse",
-        "submit" => "Form",
-        "change" => "Form",
-        "focus" => "Form",
-        "blur" => "Form",
-        "input" => "Form",
-        "reset" => "Form",
-        "select" => "Form",
-        "load" => "Window",
-        "beforeunload" => "Window",
-        "unload" => "Window",
-        "resize" => "Window",
-        "scroll" => "Window",
-        "drag" => "DragDrop",
-        "dragstart" => "DragDrop",
-        "dragend" => "DragDrop",
-        "dragenter" => "DragDrop",
-        "dragleave" => "DragDrop",
-        "dragover" => "DragDrop",
-        "drop" => "DragDrop",
-        "cut" => "Clipboard",
+        "mouseover" => "Mouse",
+        "mouseup" => "Mouse",
+
+        // Drag Events
+        "drag" => "Drag",
+        "dragend" => "Drag",
+        "dragstart" => "Drag",
+        "scroll" => "Drag",
+
+        // Clipboard Events
         "copy" => "Clipboard",
+        "cut" => "Clipboard",
         "paste" => "Clipboard",
-        "play" => "Media",
-        "pause" => "Media",
-        "ended" => "Media",
-        "timeupdate" => "Media",
+
+        // Media Events
+        "abort" => "Media",
         "canplay" => "Media",
-        "canplaythrough" => "Media",
-        "volumechange" => "Media",
+        "ended" => "Media",
+        "error" => "Media",
+        "play" => "Media",
+        "ratechange" => "Media",
         "seeked" => "Media",
         "seeking" => "Media",
-        "durationchange" => "Media",
-        "loadedmetadata" => "Media",
-        "loadeddata" => "Media",
-        "progress" => "Media",
-        "ratechange" => "Media",
         "stalled" => "Media",
         "suspend" => "Media",
+        "timeupdate" => "Media",
+        "volumechange" => "Media",
         "waiting" => "Media",
-        "error" => "Other",
-        "online" => "Other",
-        "offline" => "Other",
-        "message" => "Other",
-        "popstate" => "Other",
-        "storage" => "Other",
+
+        // Misc Events
+        "toggle" => "Misc",
+
         _ => panic!(),
     };
     let event_type = quote::format_ident!("{}Event", event_type);
 
+    let selector = format!(".{}", id);
     let set_event_handler = quote!(
         fn #function_name(&self) {
-            let __Fluent_Component = self.clone();
+            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector);
 
-            use ::fluent_web_client::internal::wasm_bindgen::JsCast;
-            let __Fluent_Element = ::fluent_web_client::internal::get_element(&self.root_name, #id);
-            let __Fluent_Element: &::fluent_web_client::internal::web_sys::#element_type = __Fluent_Element.dyn_ref().unwrap();
+            for __Fluent_Element in __Fluent_Elements.into_iter() {
+                use ::fluent_web_client::internal::wasm_bindgen::JsCast;
 
-            let element = __Fluent_Element.clone();
+                let __Fluent_Component = self.clone();
+                let __Fluent_Element: &::fluent_web_client::internal::web_sys::#element_type = __Fluent_Element.dyn_ref().unwrap();
 
-            let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
-                let event = event.dyn_ref::<::fluent_web_client::internal::web_sys::#event_type>().unwrap();
-                {
-                    #unpack_mut
-                    #code;
-                }
-                use ::fluent_web_client::internal::Component;
-                __Fluent_Component.update_all();
-            });
-            __Fluent_Element.add_event_listener_with_callback(#handler, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
-            __Fluent_Function.forget();
+                let element = __Fluent_Element.clone();
+                let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
+                    let event = event.dyn_ref::<::fluent_web_client::internal::web_sys::#event_type>().unwrap();
+                    {
+                        #unpack_mut
+                        #code;
+                    }
+                    use ::fluent_web_client::internal::Component;
+                    __Fluent_Component.update_all();
+                });
+                __Fluent_Element.add_event_listener_with_callback(#handler, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
+                __Fluent_Function.forget();
+            }
         }
     );
 
@@ -680,11 +675,12 @@ fn compile_conditional_stmt(
     let function_name =
         quote::format_ident!("update_attribute_{}", id);
 
+    let selector = format!(".{}", id);
     let update_def = quote!(
         fn #function_name(&self) {
             #unpack
 
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #id);
+            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 if #condition {
                     __Fluent_Element.set_attribute(#attribute, "").unwrap();
@@ -739,7 +735,7 @@ fn compile_fluent_file(
             .unzip();
 
     let event_info =
-        find_event_listeners_and_set_id(body_html.clone());
+        find_event_listeners_and_set_class(body_html.clone());
     let (event_set_defs, event_set_calls): (Vec<_>, Vec<_>) =
         event_info
             .iter()
@@ -761,8 +757,25 @@ fn compile_fluent_file(
         Default::default(),
     )
     .unwrap();
-    let html_content = String::from_utf8(html_content).unwrap();
-    dbg!(html_content.clone());
+    let mut html_content = String::from_utf8(html_content).unwrap();
+
+    let css_raw =
+        find_top_level_tag(&source_content, "style").unwrap_or("");
+    let mut css = lightningcss::stylesheet::StyleSheet::parse(
+        css_raw,
+        lightningcss::stylesheet::ParserOptions::default(),
+    )
+    .unwrap();
+
+    let css_content = css
+        .to_css(lightningcss::stylesheet::PrinterOptions {
+            minify: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .code;
+
+    html_content += &format!("<style>{css_content}</style>");
 
     let component_source: syn::File = syn::parse_quote!(
         #![allow(warnings)]
