@@ -1,10 +1,12 @@
 <template>
-    <p>Main</p>
-    <component src="super::Sub"></component>
+    <h1>Test Test</h2>
+    <h2>Hello {name}</h2>
+    <p>I am {sender} :D</p>
+
+    <input :input="*sender = element.value()">
 </template>
 
-<style>
-p {
-    color: blue;
-}
-</style>
+<data>
+let mut name: String = "World".into();
+let mut sender: String = "".into();
+</data>

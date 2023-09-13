@@ -1,10 +1,16 @@
 #![feature(box_patterns)]
+#![warn(clippy::unwrap_used)]
 
-use std::{env::current_dir, fs, path::PathBuf};
+use std::{
+    borrow::BorrowMut, convert::Infallible, env::current_dir, fs,
+    path::PathBuf,
+};
 
 use html5ever::tendril::TendrilSink;
+use lightningcss::visitor::Visit;
 use quote::quote;
 
+/// Compiles all files in ./src_fluent into ./src
 fn main() -> anyhow::Result<()> {
     let root_dir = current_dir()?;
     let src_fluent = root_dir.join("src_fluent");
@@ -16,20 +22,26 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Clear out the src directory to stop compilation errors from stopping trunk.
 fn clear_out_src_dir(src: &PathBuf) -> anyhow::Result<()> {
     fs::remove_dir_all(src)?;
     fs::create_dir(src)?;
 
-    fs::File::create(src.join("main.rs")).unwrap();
+    fs::File::create(src.join("main.rs"))?;
 
     Ok(())
 }
 
+/// Loop over all files in source directory and compile them into dst
 fn process_dir(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
     for file in
         fs::read_dir(&source)?.collect::<Result<Vec<_>, _>>()?
     {
-        let name = file.file_name().to_str().unwrap().to_string();
+        let name = file
+            .file_name()
+            .to_str()
+            .expect("Could not convert file name to string")
+            .to_string();
         if file.file_type()?.is_dir() {
             let dst = dst.join(name.clone());
 
@@ -46,19 +58,29 @@ fn process_dir(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Copy rust files unchanged, and run the compilation for fluent files
 fn process_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
-    match source.extension().unwrap().to_str().unwrap() {
+    match source
+        .extension()
+        .expect("Could not find extension")
+        .to_str()
+        .expect("Could not convert extension to string")
+    {
         "rs" => {
             fs::copy(source, dst)?;
         }
         "fluent" => {
+            // App.fluent => AppModule.rs
             let name = dst
                 .file_name()
-                .unwrap()
+                .expect("Could not find filename")
                 .to_str()
-                .unwrap()
+                .expect("Could not convert filename to string")
                 .to_string();
-            let component_name = name.split('.').next().unwrap();
+            let component_name = name
+                .split('.')
+                .next()
+                .expect("Expected dot in filename");
             let component_file = format!("{component_name}Module.rs");
             compile_fluent_file(
                 source,
@@ -71,6 +93,7 @@ fn process_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Find top level tags as a proper html parser would "corrupt" the content of the rust tags
 fn find_top_level_tag<'a>(
     document: &'a str,
     tag: &str,
@@ -85,27 +108,41 @@ fn find_top_level_tag<'a>(
     Some(&document[region_start..region_end])
 }
 
+/// A statement in the <data> block
 struct DataStatement {
+    /// Name for the property
     target: syn::Ident,
+    /// The type, this is used in the struct definition
     type_: syn::Type,
+    /// Expression to set inital value, this is used in the ::new() method
     init_value: syn::Expr,
 }
 
+/// Info about the data fields to be used in other generation calls
 struct DataSectionInfo {
+    /// Fields used to generate struct
     struct_fields: Vec<proc_macro2::TokenStream>,
+    /// Create instance of the struct
     create: Vec<proc_macro2::TokenStream>,
+    /// Unpack and borrow all data fields (this assumes `&self`)
     import_struct_to_local_scope: proc_macro2::TokenStream,
+    /// Unpack and borrow mutable references to all data fields, (this assumes `&mut self`)
     unpack_mut: proc_macro2::TokenStream,
 }
 
+/// Parse the data block
 fn parse_data_segement(data_section: &str) -> Vec<DataStatement> {
-    let data_block_parsed: syn::Block =
-        syn::parse_str(&format!("{{{data_section}}}")).unwrap();
+    let data_block_parsed: syn::Block = syn::parse_str(&format!(
+        "{{{data_section}}}"
+    ))
+    .expect("Valid statements in block should still be valid");
 
     data_block_parsed
         .stmts
         .into_iter()
         .map(|stmt| match stmt {
+            // Match agains a:
+            // let mut TARGET: _TYPE = EXPR;
             syn::Stmt::Local(syn::Local {
                 pat:
                     syn::Pat::Type(syn::PatType {
@@ -136,6 +173,7 @@ fn parse_data_segement(data_section: &str) -> Vec<DataStatement> {
         .collect()
 }
 
+/// Create all the code gen for the data fields
 fn compile_data_section(source_content: &str) -> DataSectionInfo {
     let data_content =
         find_top_level_tag(source_content, "data").unwrap_or("");
@@ -165,7 +203,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .iter()
         .map(|stmt| {
             let target = &stmt.target;
-            quote!(let #target = #target.borrow();)
+            quote!(let #target = ::fluent_web_client::internal::ReadDetector::new(#target.borrow());)
         })
         .collect::<Vec<_>>();
     let field_unpacking = quote!(
@@ -176,7 +214,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .iter()
         .map(|stmt| {
             let target = &stmt.target;
-            quote!(let mut #target = #target.borrow_mut();)
+            quote!(let mut #target = ::fluent_web_client::internal::WriteDetector::new(#target.borrow_mut());)
         })
         .collect::<Vec<_>>();
     let unpack_mut = quote!(
@@ -192,9 +230,12 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
     }
 }
 
+/// Get the html of a template.
 fn get_html_body(source_content: &str) -> kuchikiki::NodeRef {
+    dbg!(&source_content);
     let template_content =
         find_top_level_tag(source_content, "template").unwrap_or("");
+    dbg!(&template_content);
     let parsed_html =
         kuchikiki::parse_html_with_options(kuchikiki::ParseOpts {
             tree_builder: html5ever::tree_builder::TreeBuilderOpts {
@@ -205,17 +246,19 @@ fn get_html_body(source_content: &str) -> kuchikiki::NodeRef {
         })
         .from_utf8()
         .read_from(&mut template_content.as_bytes())
-        .unwrap();
+        .expect("Valid html");
 
     parsed_html
         .select("body")
-        .unwrap()
+        .expect("A valid selector")
         .next()
-        .unwrap()
+        .expect("There to be a <body> tag")
         .as_node()
         .clone()
 }
 
+/// Create the update functions for reactive <spans>
+/// returns: (function_def, call)
 fn create_reactive_update_function(
     reactive_text: &ReactiveText,
     unpack_data: &proc_macro2::TokenStream,
@@ -231,6 +274,8 @@ fn create_reactive_update_function(
     let selector = format!(".{}", id);
     let function_def = quote! {
         fn #function_name(&self) {
+            ::fluent_web_client::internal::log(#id);
+
             #unpack_data
 
             let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector);
@@ -245,24 +290,30 @@ fn create_reactive_update_function(
     (function_def, call)
 }
 
+/// Add a class to the `class` attribute on a node
+/// This also creates the class attribute if it is not present.
 fn add_class(attributes: &mut kuchikiki::Attributes, class: &str) {
     let current_class =
         if let Some(value) = attributes.get_mut("class") {
             value
         } else {
             attributes.insert("class", String::new());
-            attributes.get_mut("class").unwrap()
+            attributes
+                .get_mut("class")
+                .expect("Newly inserted class to be there")
         };
 
     current_class.push(' ');
     current_class.push_str(class);
 }
 
+/// Data used to create sub components
 struct SubComponentData {
     id: String,
     component_name: syn::Path,
 }
 
+/// This finds <componet> tags, parses and stores its `src` and then replaces it with a <div>
 fn find_sub_components_and_replace_with_div(
     node: kuchikiki::NodeRef,
 ) -> Vec<SubComponentData> {
@@ -275,8 +326,8 @@ fn find_sub_components_and_replace_with_div(
             let component_name = attributes
                 .get("src")
                 .expect("component tag needs a src as a rust path to point to the sub component");
-            let component_name =
-                syn::parse_str(component_name).unwrap();
+            let component_name = syn::parse_str(component_name)
+                .expect("Component src to be valid rust path");
             let id = uuid();
 
             use markup5ever::namespace_url;
@@ -308,6 +359,8 @@ fn find_sub_components_and_replace_with_div(
     }
 }
 
+/// Create the calls used for creating sub components
+/// returns (function_def, call)
 fn create_spawn_and_spawn_call_for_subcomponent(
     data: &SubComponentData,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
@@ -330,12 +383,18 @@ fn create_spawn_and_spawn_call_for_subcomponent(
 
     (function_def, function_call)
 }
+
+/// Represents the reactive text in a <span>
 struct ReactiveText {
+    /// Id of the span element, used to update it later
     id: String,
+    /// The format text
     text: String,
+    /// A list of expressions for each {} in the tag.
     expressions: Vec<syn::Expr>,
 }
 
+/// Find all text with {} and replace the text with a <span> that can be targeted by code.
 fn find_reactive_nodes_and_replace_with_span(
     node: kuchikiki::NodeRef,
 ) -> Vec<ReactiveText> {
@@ -352,6 +411,8 @@ fn find_reactive_nodes_and_replace_with_span(
 
             let mut current_str = String::new();
             let mut in_template = false;
+
+            // Find all {} pairs in the text.
             for c in text.chars() {
                 match c {
                     '{' => {
@@ -405,7 +466,7 @@ fn find_reactive_nodes_and_replace_with_span(
 
             let expressions = expressions
                 .into_iter()
-                .map(|raw| syn::parse_str(&raw).unwrap())
+                .map(|raw| syn::parse_str(&raw).expect("Template content to be valid rust expression"))
                 .collect();
 
             vec![ReactiveText {
@@ -418,13 +479,19 @@ fn find_reactive_nodes_and_replace_with_span(
     }
 }
 
+/// Represents the info for a event callback
 struct EventListener {
+    /// Element id
     id: String,
+    /// The event to handle
     handler: String,
+    /// Code block for the event handler
     code: syn::Block,
+    /// The type of element
     element: String,
 }
 
+/// Find all event listeners, set an ID so they can be found and then parse and store their info.
 fn find_event_listeners_and_set_class(
     node: kuchikiki::NodeRef,
 ) -> Vec<EventListener> {
@@ -442,7 +509,7 @@ fn find_event_listeners_and_set_class(
                         let event = name
                             .local
                             .strip_prefix(':')
-                            .unwrap()
+                            .expect("String starting with : to start with :")
                             .to_string();
                         let code = code.value.clone();
                         Some((event, code))
@@ -463,7 +530,9 @@ fn find_event_listeners_and_set_class(
 
                         let code =
                             syn::parse_str(&format!("{{{code}}}"))
-                                .unwrap();
+                                .expect(
+                                    "event handler to be valid code.",
+                                );
                         EventListener {
                             id: id.clone(),
                             handler: event,
@@ -486,6 +555,7 @@ fn find_event_listeners_and_set_class(
     }
 }
 
+/// Create the event listeners
 fn compile_event_listener(
     event: &EventListener,
     unpack_mut: &proc_macro2::TokenStream,
@@ -499,12 +569,16 @@ fn compile_event_listener(
     let function_name = quote::format_ident!("set_event_{}", id);
 
     let mut c = element.chars();
-    let element_name_cap =
-        c.next().unwrap().to_ascii_uppercase().to_string()
-            + c.as_str();
+    let element_name_cap = c
+        .next()
+        .expect("Event name to have at least one letter")
+        .to_ascii_uppercase()
+        .to_string()
+        + c.as_str();
     let element_type =
         quote::format_ident!("Html{}Element", element_name_cap);
 
+    // We need to know the type of the event so we can grab event specific attributes.
     let event_type = match handler.as_str() {
         // Window Events
         "afterprint" => "Window",
@@ -516,7 +590,7 @@ fn compile_event_listener(
         "blur" => "Form",
         "change" => "Form",
         "focus" => "Form",
-        "input" => "Form",
+        "input" => "Input",
         "submit" => "Form",
 
         // Keyboard Events
@@ -598,12 +672,14 @@ fn compile_event_listener(
     (set_event_handler, call)
 }
 
+/// Info for a attribute that is added and removed reactivly.
 struct ConditionalAttribute {
     id: String,
     attribute: String,
     condition: syn::Expr,
 }
 
+/// Find conditional attributes
 fn find_conditional_attributes_and_set_id(
     node: kuchikiki::NodeRef,
 ) -> Vec<ConditionalAttribute> {
@@ -637,10 +713,10 @@ fn find_conditional_attributes_and_set_id(
                     .map(|(name, code)| {
                         attributes.remove(name.clone());
 
-                        let code = syn::parse_str(&code).unwrap();
+                        let code = syn::parse_str(&code).expect("Conditional expression to be valid expression");
                         let name = name
                             .strip_prefix('?')
-                            .unwrap()
+                            .expect("Name to start with ?")
                             .to_string();
 
                         ConditionalAttribute {
@@ -662,6 +738,7 @@ fn find_conditional_attributes_and_set_id(
     }
 }
 
+/// Compile a conditional attribute
 fn compile_conditional_stmt(
     attribute: &ConditionalAttribute,
     unpack: &proc_macro2::TokenStream,
@@ -695,6 +772,118 @@ fn compile_conditional_stmt(
     (update_def, update_call)
 }
 
+struct CssTransformer {
+    replacement_string: String,
+}
+
+impl CssTransformer {
+    fn new() -> Self {
+        let uuid = uuid();
+        CssTransformer {
+            replacement_string: uuid,
+        }
+    }
+}
+
+impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
+    type Error = Infallible;
+
+    const TYPES: lightningcss::visitor::VisitTypes =
+        lightningcss::visit_types!(SELECTORS);
+
+    fn visit_selector(
+        &mut self,
+        selector: &mut lightningcss::selector::Selector<'i>,
+    ) -> Result<(), Self::Error> {
+        let mut segements = Vec::new();
+        let mut components_iterator = selector.iter();
+
+        let mut combiner = None;
+        loop {
+            segements.push((
+                components_iterator
+                    .borrow_mut()
+                    .map(Clone::clone)
+                    .collect::<Vec<_>>(),
+                combiner,
+            ));
+            combiner = components_iterator.next_sequence();
+
+            if combiner.is_none() {
+                break;
+            }
+        }
+
+        let where_clause =
+            lightningcss::selector::Component::Where(Box::new([
+                lightningcss::selector::Selector::from(vec![
+                    lightningcss::selector::Component::ID(
+                        self.replacement_string.clone().into(),
+                    ),
+                    lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
+                    lightningcss::selector::Component::ExplicitUniversalType,
+                    lightningcss::selector::Component::Negation(Box::new([
+                        lightningcss::selector::Selector::from(vec![
+                            lightningcss::selector::Component::ID(
+                                self.replacement_string.clone().into(),
+                            ),
+                            lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
+                            lightningcss::selector::Component::Class(
+                                "__Fluent_Component".into(),
+                            ),
+                            lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
+                            lightningcss::selector::Component::ExplicitUniversalType,
+                            ]),
+                        ])
+                    )
+                ]),
+            ]));
+
+        segements[0].0.push(where_clause.clone());
+
+        if segements.len() > 1 {
+            segements
+                .last_mut()
+                .expect("Vector containg >1 elements not to be empty")
+                .0
+                .push(where_clause);
+        }
+
+        let segements = segements
+            .into_iter()
+            .flat_map(|(mut components, combinator)| {
+                if let Some(comb) = combinator {
+                    components.insert(
+                        0,
+                        lightningcss::selector::Component::Combinator(
+                            comb,
+                        ),
+                    );
+                    components
+                } else {
+                    components
+                }
+            })
+            .collect::<Vec<_>>();
+        let new_selector: lightningcss::selector::Selector =
+            segements.into();
+        *selector = new_selector;
+
+        Ok(())
+    }
+}
+
+/// Transforms the css by adding the returned string as a placeholder for the rootname
+/// This scopes the css to the specific component using the same selector as the fluent_web_client
+fn transform_css(
+    css: &mut lightningcss::stylesheet::StyleSheet,
+) -> String {
+    let mut trans = CssTransformer::new();
+    css.visit(&mut trans).unwrap();
+    trans.replacement_string
+}
+
+/// Compiler a fluent file to a rust file, this is the main block of code
 fn compile_fluent_file(
     source: PathBuf,
     dst: PathBuf,
@@ -756,8 +945,9 @@ fn compile_fluent_file(
         &body_html,
         Default::default(),
     )
-    .unwrap();
-    let mut html_content = String::from_utf8(html_content).unwrap();
+    .expect("<template> body to be valid html");
+    let mut html_content = String::from_utf8(html_content)
+        .expect("<template> to be valid utf8");
 
     let css_raw =
         find_top_level_tag(&source_content, "style").unwrap_or("");
@@ -765,21 +955,29 @@ fn compile_fluent_file(
         css_raw,
         lightningcss::stylesheet::ParserOptions::default(),
     )
-    .unwrap();
+    .expect("<style> tag to be valid css");
+
+    let replace_string = transform_css(&mut css);
 
     let css_content = css
         .to_css(lightningcss::stylesheet::PrinterOptions {
             minify: true,
             ..Default::default()
         })
-        .unwrap()
+        .expect("To be able to minify css")
         .code;
 
+    let css_content = css_content
+        .replace('{', "{{")
+        .replace('}', "}}")
+        .replace(&replace_string, "{root}");
+
+    dbg!(&html_content);
     html_content += &format!("<style>{css_content}</style>");
+    dbg!(&html_content);
 
     let component_source: syn::File = syn::parse_quote!(
         #![allow(warnings)]
-
         use ::fluent_web_client::internal::web_sys::*;
 
         #define_parsed
@@ -804,7 +1002,8 @@ fn compile_fluent_file(
 
         impl ::fluent_web_client::internal::Component for Component {
             fn render_init(&self) -> ::std::string::String {
-                #html_content.into()
+                let root = &self.root_name;
+                format!(#html_content)
             }
 
             fn create(root_id: String) -> Self {
@@ -847,13 +1046,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_find() {
+    fn test_find_top_level_tag() {
         const CONTENT: &str = "<a>Hello World</a> <b>123</b>";
 
         assert_eq!(
             "Hello World",
-            find_top_level_tag(CONTENT, "a").unwrap()
+            find_top_level_tag(CONTENT, "a")
+                .expect("<a> to be in test content")
         );
-        assert_eq!("123", find_top_level_tag(CONTENT, "b").unwrap())
+        assert_eq!(
+            "123",
+            find_top_level_tag(CONTENT, "b")
+                .expect("<b> to be in test content")
+        )
     }
 }

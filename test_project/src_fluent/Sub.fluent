@@ -1,9 +1,0 @@
-<template>
-    <p>Sub</p>
-</template>
-
-<style>
-p {
-    background-color: red;
-}
-</style>

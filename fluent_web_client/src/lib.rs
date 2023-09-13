@@ -9,6 +9,10 @@ pub fn render_component<C: internal::Component>(mount_point: &str) {
     let element = document.get_element_by_id(mount_point).unwrap();
 
     element.class_list().add_1("__Fluent_Component").unwrap();
+    element
+        .class_list()
+        .remove_1("__Fluent_Needs_Init")
+        .unwrap();
 
     let component = C::create(mount_point.to_owned());
     element.set_inner_html(&component.render_init());
