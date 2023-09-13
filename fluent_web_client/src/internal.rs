@@ -1,6 +1,8 @@
 use std::{
-    cell::{Cell, Ref, RefMut},
+    cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
+    ops::{Deref, DerefMut},
+    rc::Rc,
 };
 
 pub use wasm_bindgen;
@@ -93,79 +95,113 @@ pub fn display<T: DomDisplay>(value: &T) -> String {
     value.dom_display()
 }
 
-pub struct ReadDetector<'a, T> {
-    value: Ref<'a, T>,
-    read: Cell<bool>,
+pub fn log(msg: &str) {
+    web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(msg));
 }
 
-impl<'a, T> ReadDetector<'a, T> {
-    pub fn new(value: Ref<'a, T>) -> Self {
+pub struct ChangeDetector<T> {
+    value: Rc<RefCell<T>>,
+    read: Rc<RefCell<bool>>,
+    write: Rc<RefCell<bool>>,
+}
+
+impl<T> Clone for ChangeDetector<T> {
+    fn clone(&self) -> Self {
         Self {
-            value,
-            read: Cell::new(false),
+            value: self.value.clone(),
+            read: self.read.clone(),
+            write: self.write.clone(),
+        }
+    }
+}
+
+impl<T> ChangeDetector<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            value: Rc::new(RefCell::new(value)),
+            read: Rc::new(RefCell::new(false)),
+            write: Rc::new(RefCell::new(false)),
         }
     }
 
-    pub fn is_read(&self) -> bool {
-        self.read.get()
+    pub fn was_read(&self) -> bool {
+        *self.read.borrow()
+    }
+
+    pub fn was_written(&self) -> bool {
+        *self.write.borrow()
     }
 
     pub fn clear(&self) {
-        self.read.set(false);
+        *self.read.borrow_mut() = false;
+        *self.write.borrow_mut() = false;
     }
-}
 
-impl<'a, T> std::ops::Deref for ReadDetector<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.read.set(true);
-        &self.value
-    }
-}
-
-impl<'a, T: DomDisplay> DomDisplay for ReadDetector<'a, T> {
-    fn dom_display(&self) -> String {
-        self.value.dom_display()
-    }
-}
-
-pub struct WriteDetector<'a, T> {
-    value: RefMut<'a, T>,
-    write: bool,
-}
-
-impl<'a, T> WriteDetector<'a, T> {
-    pub fn new(value: RefMut<'a, T>) -> Self {
-        Self {
-            value,
-            write: false,
+    pub fn borrow(&self) -> ChangeDetectorRead<T> {
+        ChangeDetectorRead {
+            value: self.value.borrow(),
+            read: self.read.clone(),
         }
     }
 
-    pub fn is_write(&self) -> bool {
-        self.write
-    }
-
-    pub fn clear(&mut self) {
-        self.write = false;
+    pub fn borrow_mut(&self) -> ChangeDetectorWrite<T> {
+        ChangeDetectorWrite {
+            value: self.value.borrow_mut(),
+            read: self.read.clone(),
+            write: self.write.clone(),
+        }
     }
 }
 
-impl<'a, T> std::ops::Deref for WriteDetector<'a, T> {
+pub struct ChangeDetectorRead<'a, T> {
+    value: Ref<'a, T>,
+    read: Rc<RefCell<bool>>,
+}
+
+pub struct ChangeDetectorWrite<'a, T> {
+    value: RefMut<'a, T>,
+    read: Rc<RefCell<bool>>,
+    write: Rc<RefCell<bool>>,
+}
+
+impl<'a, T> Deref for ChangeDetectorRead<'a, T> {
     type Target = T;
+
     fn deref(&self) -> &Self::Target {
+        *self.read.borrow_mut() = true;
         &self.value
     }
 }
 
-impl<'a, T> std::ops::DerefMut for WriteDetector<'a, T> {
+impl<'a, T> Deref for ChangeDetectorWrite<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        *self.read.borrow_mut() = true;
+        &self.value
+    }
+}
+
+impl<'a, T> DerefMut for ChangeDetectorWrite<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.write = true;
+        *self.read.borrow_mut() = true;
+        *self.write.borrow_mut() = true;
         &mut self.value
     }
 }
 
-pub fn log(msg: &str) {
-    web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(msg));
+// we use `**self` instead of `self.value` to trigger the updating of the `read` flag.
+
+impl<'a, T: DomDisplay> DomDisplay for ChangeDetectorRead<'a, T> {
+    #[inline(always)]
+    fn dom_display(&self) -> String {
+        (**self).dom_display()
+    }
+}
+
+impl<'a, T: DomDisplay> DomDisplay for ChangeDetectorWrite<'a, T> {
+    #[inline(always)]
+    fn dom_display(&self) -> String {
+        (**self).dom_display()
+    }
 }

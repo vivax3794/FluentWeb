@@ -128,6 +128,9 @@ struct DataSectionInfo {
     import_struct_to_local_scope: proc_macro2::TokenStream,
     /// Unpack and borrow mutable references to all data fields, (this assumes `&mut self`)
     unpack_mut: proc_macro2::TokenStream,
+    unpack_change_detector: proc_macro2::TokenStream,
+    reactive_updates: Vec<proc_macro2::TokenStream>,
+    targets: Vec<syn::Ident>,
 }
 
 /// Parse the data block
@@ -184,7 +187,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .map(|stmt| {
             let name = &stmt.target;
             let type_ = &stmt.type_;
-            quote!(#name: ::std::rc::Rc<::std::cell::RefCell<#type_>>)
+            quote!(#name: ::fluent_web_client::internal::ChangeDetector<#type_>)
         })
         .collect();
     let create_statements: Vec<_> = data_statements
@@ -192,41 +195,62 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .map(|stmt| {
             let name = &stmt.target;
             let expr = &stmt.init_value;
-            quote!(#name: ::std::rc::Rc::new(::std::cell::RefCell::new(#expr)))
+            quote!(#name: ::fluent_web_client::internal::ChangeDetector::new(#expr))
         })
         .collect();
     let field_getters = data_statements
         .iter()
         .map(|stmt| &stmt.target)
         .collect::<Vec<_>>();
-    let field_borrows = data_statements
+
+    let borrow = data_statements
         .iter()
         .map(|stmt| {
             let target = &stmt.target;
-            quote!(let #target = ::fluent_web_client::internal::ReadDetector::new(#target.borrow());)
+            quote!(let #target = #target.borrow();)
         })
         .collect::<Vec<_>>();
+    let borrow_mut = data_statements
+        .iter()
+        .map(|stmt| {
+            let target = &stmt.target;
+            quote!(let mut #target = #target.borrow_mut();)
+        })
+        .collect::<Vec<_>>();
+
+    let unpack_change_detector = quote!(
+        let __Fluid_Data { #(#field_getters),* } = self.data.clone();
+    );
+
     let field_unpacking = quote!(
-        let __Fluid_Data { #(#field_getters),* } = &self.data;
-        #(#field_borrows)*
+        #unpack_change_detector
+        #(#borrow)*
     );
-    let field_borrows_mut = data_statements
+
+    let unpack_mut = quote!(
+        let __Fluid_Data { #(#field_getters),* } = __Fluent_Component.data.clone();
+        #(#borrow_mut)*
+    );
+
+    let reactive_fields = data_statements
         .iter()
         .map(|stmt| {
             let target = &stmt.target;
-            quote!(let mut #target = ::fluent_web_client::internal::WriteDetector::new(#target.borrow_mut());)
+            quote!(#target: ::std::collections::HashSet<fn(&Component)>)
         })
         .collect::<Vec<_>>();
-    let unpack_mut = quote!(
-        let __Fluid_Data { #(#field_getters),* } = &__Fluent_Component.data;
-        #(#field_borrows_mut)*
-    );
 
     DataSectionInfo {
         struct_fields,
         create: create_statements,
         import_struct_to_local_scope: field_unpacking,
         unpack_mut,
+        unpack_change_detector,
+        reactive_updates: reactive_fields,
+        targets: data_statements
+            .into_iter()
+            .map(|stmt| stmt.target)
+            .collect(),
     }
 }
 
@@ -274,8 +298,6 @@ fn create_reactive_update_function(
     let selector = format!(".{}", id);
     let function_def = quote! {
         fn #function_name(&self) {
-            ::fluent_web_client::internal::log(#id);
-
             #unpack_data
 
             let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector);
@@ -283,6 +305,8 @@ fn create_reactive_update_function(
                 let __Fluent_Text = &::std::format!(#text, #(::fluent_web_client::internal::display(&(#expressions))),*);
                 __Fluent_Element.set_text_content(::std::option::Option::Some(__Fluent_Text));
             }
+
+            self.detect_reads(Component::#function_name);
         }
     };
     let call = quote!(self.#function_name(););
@@ -659,7 +683,7 @@ fn compile_event_listener(
                         #code;
                     }
                     use ::fluent_web_client::internal::Component;
-                    __Fluent_Component.update_all();
+                    __Fluent_Component.update_changed_values();
                 });
                 __Fluent_Element.add_event_listener_with_callback(#handler, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
                 __Fluent_Function.forget();
@@ -895,6 +919,9 @@ fn compile_fluent_file(
         create: data_create_fields,
         import_struct_to_local_scope: unpack_data,
         unpack_mut,
+        unpack_change_detector,
+        reactive_updates,
+        targets: data_targets,
     } = compile_data_section(&source_content);
 
     let define_content =
@@ -976,6 +1003,19 @@ fn compile_fluent_file(
     html_content += &format!("<style>{css_content}</style>");
     dbg!(&html_content);
 
+    let read_updates = data_targets.iter().map(|target| {
+        quote!(
+            if #target.was_read() {__Fluent_Updates.#target.insert(f);}
+            #target.clear();
+        )
+    }).collect::<Vec<_>>();
+    let write_updates = data_targets.iter().map(|target| {
+        quote!(
+            if #target.was_written() {__Fluent_Functions.extend(__Fluent_Updates.#target.iter());}
+            #target.clear();
+        )
+    }).collect::<Vec<_>>();
+
     let component_source: syn::File = syn::parse_quote!(
         #![allow(warnings)]
         use ::fluent_web_client::internal::web_sys::*;
@@ -987,10 +1027,16 @@ fn compile_fluent_file(
             #(#data_struct_fields),*
         }
 
+        #[derive(Default)]
+        struct __Fluid_Reactive_Functions {
+            #(#reactive_updates),*
+        }
+
         #[derive(Clone)]
         pub struct Component {
             root_name: ::std::string::String,
             data: __Fluid_Data,
+            updates: ::std::rc::Rc<::std::cell::RefCell<__Fluid_Reactive_Functions>>,
         }
 
         impl Component {
@@ -998,6 +1044,26 @@ fn compile_fluent_file(
             #(#reactive_update_defs)*
             #(#conditional_defs)*
             #(#event_set_defs)*
+
+            fn detect_reads(&self, f: fn(&Component)) {
+                let mut __Fluent_Updates = self.updates.borrow_mut();
+                #unpack_change_detector
+                #(#read_updates)*
+            }
+
+            fn update_changed_values(&self) {
+                let mut __Fluent_Updates = self.updates.borrow_mut();
+                #unpack_change_detector
+
+                let mut __Fluent_Functions: ::std::collections::HashSet<fn(&Component)> = ::std::collections::HashSet::new();
+                #(#write_updates)*
+
+                ::std::mem::drop(__Fluent_Updates);
+
+                for func in __Fluent_Functions.into_iter() {
+                    func(self);
+                }
+            }
         }
 
         impl ::fluent_web_client::internal::Component for Component {
@@ -1011,7 +1077,8 @@ fn compile_fluent_file(
                     root_name: root_id,
                     data: __Fluid_Data {
                         #(#data_create_fields),*
-                    }
+                    },
+                    updates: ::std::rc::Rc::new(::std::cell::RefCell::new(__Fluid_Reactive_Functions::default())),
                 }
             }
 

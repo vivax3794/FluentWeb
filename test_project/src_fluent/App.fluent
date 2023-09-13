@@ -1,12 +1,13 @@
 <template>
     <h1>Test Test</h2>
     <h2>Hello {name}</h2>
-    <p>I am {sender} :D</p>
+    <p>I am {sender} and I love {name}</p>
 
     <input :input="*sender = element.value()">
+    <input :input="*name = element.value()">
 </template>
 
 <data>
-let mut name: String = "World".into();
+let mut name: String = "".into();
 let mut sender: String = "".into();
 </data>

@@ -1,6 +1,7 @@
 #![feature(specialization)]
 #![allow(incomplete_features)]
 
+#[doc(hidden)]
 pub mod internal;
 
 pub fn render_component<C: internal::Component>(mount_point: &str) {
@@ -21,6 +22,7 @@ pub fn render_component<C: internal::Component>(mount_point: &str) {
     component.update_all();
 }
 
+#[doc(hidden)]
 pub use paste::paste;
 
 #[macro_export]
