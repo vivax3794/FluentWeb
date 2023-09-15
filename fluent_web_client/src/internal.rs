@@ -5,9 +5,13 @@ use std::{
     rc::Rc,
 };
 
+pub use derivative::Derivative;
+pub use serde;
+pub use serde_wasm_bindgen;
 pub use wasm_bindgen;
-use wasm_bindgen::JsCast;
 pub use web_sys;
+
+use wasm_bindgen::JsCast;
 
 pub trait Component {
     fn render_init(&self) -> String;
@@ -21,6 +25,13 @@ pub trait Component {
 pub fn uuid() -> String {
     let id = uuid::Uuid::new_v4().to_string();
     format!("__Fluent_UUID_{id}")
+}
+
+pub fn get_by_id(id: &str) -> web_sys::Element {
+    let selector = ::std::format!("#{}", id);
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    document.query_selector(&selector).unwrap().unwrap()
 }
 
 pub fn get_element(
@@ -99,20 +110,12 @@ pub fn log(msg: &str) {
     web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(msg));
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct ChangeDetector<T> {
     value: Rc<RefCell<T>>,
     read: Rc<RefCell<bool>>,
     write: Rc<RefCell<bool>>,
-}
-
-impl<T> Clone for ChangeDetector<T> {
-    fn clone(&self) -> Self {
-        Self {
-            value: self.value.clone(),
-            read: self.read.clone(),
-            write: self.write.clone(),
-        }
-    }
 }
 
 impl<T> ChangeDetector<T> {
@@ -204,4 +207,14 @@ impl<'a, T: DomDisplay> DomDisplay for ChangeDetectorWrite<'a, T> {
     fn dom_display(&self) -> String {
         (**self).dom_display()
     }
+}
+
+pub trait UseInEvent:
+    serde::Serialize + for<'a> serde::Deserialize<'a>
+{
+}
+
+impl<T> UseInEvent for T where
+    T: serde::Serialize + for<'a> serde::Deserialize<'a>
+{
 }

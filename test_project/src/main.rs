@@ -1,3 +1,5 @@
+#![feature(inherent_associated_types)]
+#[allow(incomplete_features)]
 use fluent_web_client::component;
 
 component!(App);

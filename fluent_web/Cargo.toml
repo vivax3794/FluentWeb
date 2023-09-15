@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 html5ever = "0.26.0"
+itertools = "0.11.0"
 kuchikiki = "0.8.2"
 lightningcss = { version = "1.0.0-alpha.45", default-features = false, features = [
     "visitor",
@@ -21,5 +22,6 @@ syn = { version = "2.0.29", default-features = false, features = [
     "parsing",
     "printing",
     "proc-macro",
+    "full"
 ] }
 uuid = { version = "1.4.1", features = ["v4"] }

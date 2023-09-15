@@ -1,13 +1,10 @@
 <template>
-    <h1>Test Test</h2>
-    <h2>Hello {name}</h2>
-    <p>I am {sender} and I love {name}</p>
-
-    <input :input="*sender = element.value()">
-    <input :input="*name = element.value()">
+    <input type="checkbox" checked :click="*hide = element.checked()">
+    <input =type='
+    if hide { "password" } else { "text" }
+    ' value="SecretPassword">
 </template>
 
 <data>
-let mut name: String = "".into();
-let mut sender: String = "".into();
+let mut hide: bool = true;
 </data>

@@ -177,7 +177,10 @@ fn parse_data_segement(data_section: &str) -> Vec<DataStatement> {
 }
 
 /// Create all the code gen for the data fields
-fn compile_data_section(source_content: &str) -> DataSectionInfo {
+fn compile_data_section(
+    source_content: &str,
+    ty_generics: &proc_macro2::TokenStream,
+) -> DataSectionInfo {
     let data_content =
         find_top_level_tag(source_content, "data").unwrap_or("");
     let data_statements = parse_data_segement(data_content);
@@ -187,7 +190,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .map(|stmt| {
             let name = &stmt.target;
             let type_ = &stmt.type_;
-            quote!(#name: ::fluent_web_client::internal::ChangeDetector<#type_>)
+            quote!(#name: ::fluent_web_client::internal::ChangeDetector<#type_>,)
         })
         .collect();
     let create_statements: Vec<_> = data_statements
@@ -195,7 +198,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .map(|stmt| {
             let name = &stmt.target;
             let expr = &stmt.init_value;
-            quote!(#name: ::fluent_web_client::internal::ChangeDetector::new(#expr))
+            quote!(#name: ::fluent_web_client::internal::ChangeDetector::new(#expr),)
         })
         .collect();
     let field_getters = data_statements
@@ -219,7 +222,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .collect::<Vec<_>>();
 
     let unpack_change_detector = quote!(
-        let __Fluid_Data { #(#field_getters),* } = self.data.clone();
+        let __Fluid_Data { #(#field_getters,)* .. } = self.data.clone();
     );
 
     let field_unpacking = quote!(
@@ -228,7 +231,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
     );
 
     let unpack_mut = quote!(
-        let __Fluid_Data { #(#field_getters),* } = __Fluent_Component.data.clone();
+        #unpack_change_detector
         #(#borrow_mut)*
     );
 
@@ -236,7 +239,7 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
         .iter()
         .map(|stmt| {
             let target = &stmt.target;
-            quote!(#target: ::std::collections::HashSet<fn(&Component)>)
+            quote!(#target: ::std::collections::HashSet<fn(&Component #ty_generics)>,)
         })
         .collect::<Vec<_>>();
 
@@ -256,10 +259,8 @@ fn compile_data_section(source_content: &str) -> DataSectionInfo {
 
 /// Get the html of a template.
 fn get_html_body(source_content: &str) -> kuchikiki::NodeRef {
-    dbg!(&source_content);
     let template_content =
         find_top_level_tag(source_content, "template").unwrap_or("");
-    dbg!(&template_content);
     let parsed_html =
         kuchikiki::parse_html_with_options(kuchikiki::ParseOpts {
             tree_builder: html5ever::tree_builder::TreeBuilderOpts {
@@ -513,6 +514,7 @@ struct EventListener {
     code: syn::Block,
     /// The type of element
     element: String,
+    event_component: Option<proc_macro2::TokenStream>,
 }
 
 /// Find all event listeners, set an ID so they can be found and then parse and store their info.
@@ -536,7 +538,15 @@ fn find_event_listeners_and_set_class(
                             .expect("String starting with : to start with :")
                             .to_string();
                         let code = code.value.clone();
-                        Some((event, code))
+                        Some((event, code, false))
+                    } else if name.local.starts_with('@') {
+                        let event = name
+                            .local
+                            .strip_prefix('@')
+                            .expect("String starting with : to start with :")
+                            .to_string();
+                        let code = code.value.clone();
+                        Some((event, code, true))
                     } else {
                         None
                     }
@@ -549,7 +559,7 @@ fn find_event_listeners_and_set_class(
 
                 events
                     .into_iter()
-                    .map(|(event, code)| {
+                    .map(|(event, code, component)| {
                         attributes.remove(format!(":{event}"));
 
                         let code =
@@ -557,11 +567,26 @@ fn find_event_listeners_and_set_class(
                                 .expect(
                                     "event handler to be valid code.",
                                 );
+
+                        let event_component = if component {
+                            Some(
+                                syn::parse_str(
+                                    attributes.get("src").expect(
+                                        "@Event to have a src attribute",
+                                    ),
+                                )
+                                .expect("src to be valid rust path")
+                            )
+                        } else {
+                            None
+                        };
+
                         EventListener {
                             id: id.clone(),
                             handler: event,
                             code,
                             element: element_name.clone(),
+                            event_component,
                         }
                     })
                     .collect()
@@ -589,9 +614,18 @@ fn compile_event_listener(
         handler,
         code,
         element,
+        event_component,
     } = event;
     let function_name = quote::format_ident!("set_event_{}", id);
+    let function_name_internal =
+        quote::format_ident!("{}_interal", function_name);
 
+    let element = element.clone();
+    let element = if event_component.is_none() {
+        element
+    } else {
+        String::from("div")
+    };
     let mut c = element.chars();
     let element_name_cap = c
         .next()
@@ -602,91 +636,108 @@ fn compile_event_listener(
     let element_type =
         quote::format_ident!("Html{}Element", element_name_cap);
 
-    // We need to know the type of the event so we can grab event specific attributes.
-    let event_type = match handler.as_str() {
-        // Window Events
-        "afterprint" => "Window",
-        "beforeprint" => "Window",
-        "load" => "Window",
-        "resize" => "Window",
+    let event_reading = if let Some(component_path) = event_component
+    {
+        let event_name =
+            quote::format_ident!("__Fluent_Event_{}", handler);
+        let event_type = quote!(#component_path::#event_name);
+        quote!(
+            let __Fluent_Custom_Event = event.dyn_ref::<::fluent_web_client::internal::web_sys::CustomEvent>().unwrap();
+            let __Fluent_Details = __Fluent_Custom_Event.detail();
+            let event: #event_type = ::fluent_web_client::internal::serde_wasm_bindgen::from_value(__Fluent_Details).unwrap();
+            let event = event.0;
+        )
+    } else {
+        // We need to know the type of the event so we can grab event specific attributes.
+        let event_type = match handler.as_str() {
+            // Window Events
+            "afterprint" => "Window",
+            "beforeprint" => "Window",
+            "load" => "Window",
+            "resize" => "Window",
 
-        // Form Events
-        "blur" => "Form",
-        "change" => "Form",
-        "focus" => "Form",
-        "input" => "Input",
-        "submit" => "Form",
+            // Form Events
+            "blur" => "Form",
+            "change" => "Form",
+            "focus" => "Form",
+            "input" => "Input",
+            "submit" => "Form",
 
-        // Keyboard Events
-        "keydown" => "Keyboard",
-        "keypress" => "Keyboard",
-        "keyup" => "Keyboard",
+            // Keyboard Events
+            "keydown" => "Keyboard",
+            "keypress" => "Keyboard",
+            "keyup" => "Keyboard",
 
-        // Mouse Events
-        "click" => "Mouse",
-        "dblclick" => "Mouse",
-        "mousedown" => "Mouse",
-        "mousemove" => "Mouse",
-        "mouseout" => "Mouse",
-        "mouseover" => "Mouse",
-        "mouseup" => "Mouse",
+            // Mouse Events
+            "click" => "Mouse",
+            "dblclick" => "Mouse",
+            "mousedown" => "Mouse",
+            "mousemove" => "Mouse",
+            "mouseout" => "Mouse",
+            "mouseover" => "Mouse",
+            "mouseup" => "Mouse",
 
-        // Drag Events
-        "drag" => "Drag",
-        "dragend" => "Drag",
-        "dragstart" => "Drag",
-        "scroll" => "Drag",
+            // Drag Events
+            "drag" => "Drag",
+            "dragend" => "Drag",
+            "dragstart" => "Drag",
+            "scroll" => "Drag",
 
-        // Clipboard Events
-        "copy" => "Clipboard",
-        "cut" => "Clipboard",
-        "paste" => "Clipboard",
+            // Clipboard Events
+            "copy" => "Clipboard",
+            "cut" => "Clipboard",
+            "paste" => "Clipboard",
 
-        // Media Events
-        "abort" => "Media",
-        "canplay" => "Media",
-        "ended" => "Media",
-        "error" => "Media",
-        "play" => "Media",
-        "ratechange" => "Media",
-        "seeked" => "Media",
-        "seeking" => "Media",
-        "stalled" => "Media",
-        "suspend" => "Media",
-        "timeupdate" => "Media",
-        "volumechange" => "Media",
-        "waiting" => "Media",
+            // Media Events
+            "abort" => "Media",
+            "canplay" => "Media",
+            "ended" => "Media",
+            "error" => "Media",
+            "play" => "Media",
+            "ratechange" => "Media",
+            "seeked" => "Media",
+            "seeking" => "Media",
+            "stalled" => "Media",
+            "suspend" => "Media",
+            "timeupdate" => "Media",
+            "volumechange" => "Media",
+            "waiting" => "Media",
 
-        // Misc Events
-        "toggle" => "Misc",
+            // Misc Events
+            "toggle" => "Misc",
 
-        _ => panic!(),
+            _ => panic!(),
+        };
+        let event_type = quote::format_ident!("{}Event", event_type);
+        quote!(let event = event.dyn_ref::<::fluent_web_client::internal::web_sys::#event_type>().unwrap();)
     };
-    let event_type = quote::format_ident!("{}Event", event_type);
 
     let selector = format!(".{}", id);
     let set_event_handler = quote!(
+        fn #function_name_internal(self, __Fluent_Element: ::fluent_web_client::internal::web_sys::Element) {
+            use ::fluent_web_client::internal::wasm_bindgen::JsCast;
+
+            let __Fluent_Element: &::fluent_web_client::internal::web_sys::#element_type = __Fluent_Element.dyn_ref().unwrap();
+            let element = __Fluent_Element.clone();
+
+            let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
+                #event_reading
+                {
+                    #unpack_mut
+                    #code;
+                }
+                use ::fluent_web_client::internal::Component;
+                self.update_changed_values();
+            });
+            __Fluent_Element.add_event_listener_with_callback(#handler, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
+            __Fluent_Function.forget();
+        }
+
         fn #function_name(&self) {
             let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector);
 
             for __Fluent_Element in __Fluent_Elements.into_iter() {
-                use ::fluent_web_client::internal::wasm_bindgen::JsCast;
-
-                let __Fluent_Component = self.clone();
-                let __Fluent_Element: &::fluent_web_client::internal::web_sys::#element_type = __Fluent_Element.dyn_ref().unwrap();
-
-                let element = __Fluent_Element.clone();
-                let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
-                    let event = event.dyn_ref::<::fluent_web_client::internal::web_sys::#event_type>().unwrap();
-                    {
-                        #unpack_mut
-                        #code;
-                    }
-                    use ::fluent_web_client::internal::Component;
-                    __Fluent_Component.update_changed_values();
-                });
-                __Fluent_Element.add_event_listener_with_callback(#handler, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
-                __Fluent_Function.forget();
+                self.clone().#function_name_internal(__Fluent_Element);
             }
         }
     );
@@ -794,6 +845,137 @@ fn compile_conditional_stmt(
     let update_call = quote!(self.#function_name(););
 
     (update_def, update_call)
+}
+
+struct Generics {
+    impl_generics: proc_macro2::TokenStream,
+    ty_generics: proc_macro2::TokenStream,
+    where_clauses: proc_macro2::TokenStream,
+    generic_def: proc_macro2::TokenStream,
+    phantom: proc_macro2::TokenStream,
+}
+
+fn parse_generics(source_content: &str) -> Generics {
+    let generic_content =
+        find_top_level_tag(source_content, "generic");
+
+    match generic_content {
+        None => Generics {
+            impl_generics: quote!(),
+            ty_generics: quote!(),
+            where_clauses: quote!(),
+            generic_def: quote!(),
+            phantom: quote!(::std::marker::PhantomData<()>),
+        },
+        Some(generic_content) => {
+            let fake_item: syn::ItemStruct = syn::parse_str(
+                &format!("struct Fake{generic_content};"),
+            )
+            .expect("Valid generics");
+
+            let generics = fake_item.generics;
+
+            let (impl_generic, ty_generics, where_clauses) =
+                generics.split_for_impl();
+
+            let phantom_args = generics
+                .params
+                .iter()
+                .map(|param| match param {
+                    syn::GenericParam::Const(syn::ConstParam {
+                        ident,
+                        ..
+                    }) => quote!(#ident),
+                    syn::GenericParam::Lifetime(
+                        syn::LifetimeParam { lifetime, .. },
+                    ) => quote!(#lifetime),
+                    syn::GenericParam::Type(syn::TypeParam {
+                        ident,
+                        ..
+                    }) => quote!(#ident),
+                })
+                .collect::<Vec<_>>();
+
+            Generics {
+                impl_generics: quote!(#impl_generic),
+                ty_generics: quote!(#ty_generics),
+                where_clauses: quote!(#where_clauses),
+                generic_def: quote!(#generics #where_clauses),
+                phantom: quote!(::std::marker::PhantomData<(#(#phantom_args),*)>),
+            }
+        }
+    }
+}
+
+fn parse_events(source_content: &str) -> Vec<syn::ItemStruct> {
+    let event_content =
+        find_top_level_tag(source_content, "events").unwrap_or("");
+    let block: syn::File = syn::parse_str(event_content)
+        .expect("<events> to be valid top level");
+
+    block
+        .items
+        .into_iter()
+        .map(|item| match item {
+            syn::Item::Struct(struct_) => struct_,
+            _ => panic!("<events> to only contain structs"),
+        })
+        .collect()
+}
+
+fn compile_events(
+    events: Vec<syn::ItemStruct>,
+    generics_impl: &proc_macro2::TokenStream,
+    generics_ty: &proc_macro2::TokenStream,
+    generics_where: &proc_macro2::TokenStream,
+    phantom: &proc_macro2::TokenStream,
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
+    let (events, wrappers, wrapper_types): (Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(events
+        .into_iter()
+        .map(|item| {
+            let (used_generics, _, _) = item.generics.split_for_impl();
+            let ident = &item.ident;
+            let ident_string = ident.to_string();
+            let main = quote!(
+                #[derive(
+                    ::fluent_web_client::internal::serde::Serialize,
+                    ::fluent_web_client::internal::serde::Deserialize
+                )]
+                #[serde(crate="::fluent_web_client::internal::serde")]
+                #item
+                impl #generics_impl __Fluent_Event #generics_ty for #ident #used_generics #generics_where {
+                    const NAME: &'static str = #ident_string;
+                    type Wrapper = __Fluent_Events::#ident #generics_ty;
+                    fn wrap(self) -> Self::Wrapper {
+                        __Fluent_Events::#ident(
+                            self,
+                            ::std::marker::PhantomData,
+                        )
+                    }
+                }
+            );
+            let wrapper = quote!(
+                #[derive(
+                    ::fluent_web_client::internal::serde::Serialize,
+                    ::fluent_web_client::internal::serde::Deserialize
+                )]
+                #[serde(crate="::fluent_web_client::internal::serde")]
+                pub struct #ident #generics_ty (pub super::#ident #used_generics, pub #phantom);
+            );
+            let event_name = quote::format_ident!("__Fluent_Event_{}", ident);
+            let wrapper_type = quote!(pub type #event_name = __Fluent_Events::#ident #generics_ty;);
+            (main, wrapper, wrapper_type)
+        }));
+
+    (
+        quote!(#(#events)*),
+        quote!(#(#wrappers)*),
+        quote!(#(#wrapper_types)*),
+    )
 }
 
 struct CssTransformer {
@@ -914,6 +1096,14 @@ fn compile_fluent_file(
 ) -> anyhow::Result<()> {
     let source_content = fs::read_to_string(source)?;
 
+    let Generics {
+        impl_generics,
+        ty_generics,
+        where_clauses,
+        generic_def,
+        phantom,
+    } = parse_generics(&source_content);
+
     let DataSectionInfo {
         struct_fields: data_struct_fields,
         create: data_create_fields,
@@ -922,7 +1112,15 @@ fn compile_fluent_file(
         unpack_change_detector,
         reactive_updates,
         targets: data_targets,
-    } = compile_data_section(&source_content);
+    } = compile_data_section(&source_content, &ty_generics);
+
+    let (events, wrappers, wrappers_type) = compile_events(
+        parse_events(&source_content),
+        &impl_generics,
+        &ty_generics,
+        &where_clauses,
+        &phantom,
+    );
 
     let define_content =
         find_top_level_tag(&source_content, "define").unwrap_or("");
@@ -942,20 +1140,20 @@ fn compile_fluent_file(
         })
         .unzip();
 
-    let subcomponent_info =
-        find_sub_components_and_replace_with_div(body_html.clone());
-    let (subcomponent_defs, subcomponent_calls): (Vec<_>, Vec<_>) =
-        subcomponent_info
-            .iter()
-            .map(create_spawn_and_spawn_call_for_subcomponent)
-            .unzip();
-
     let event_info =
         find_event_listeners_and_set_class(body_html.clone());
     let (event_set_defs, event_set_calls): (Vec<_>, Vec<_>) =
         event_info
             .iter()
             .map(|event| compile_event_listener(event, &unpack_mut))
+            .unzip();
+
+    let subcomponent_info =
+        find_sub_components_and_replace_with_div(body_html.clone());
+    let (subcomponent_defs, subcomponent_calls): (Vec<_>, Vec<_>) =
+        subcomponent_info
+            .iter()
+            .map(create_spawn_and_spawn_call_for_subcomponent)
             .unzip();
 
     let conditional_info =
@@ -999,10 +1197,7 @@ fn compile_fluent_file(
         .replace('}', "}}")
         .replace(&replace_string, "{root}");
 
-    dbg!(&html_content);
     html_content += &format!("<style>{css_content}</style>");
-    dbg!(&html_content);
-
     let read_updates = data_targets.iter().map(|target| {
         quote!(
             if #target.was_read() {__Fluent_Updates.#target.insert(f);}
@@ -1019,33 +1214,54 @@ fn compile_fluent_file(
     let component_source: syn::File = syn::parse_quote!(
         #![allow(warnings)]
         use ::fluent_web_client::internal::web_sys::*;
+        use ::fluent_web_client::internal::DomDisplay;
+        use ::fluent_web_client::internal::UseInEvent;
 
         #define_parsed
 
-        #[derive(Clone)]
-        struct __Fluid_Data {
-            #(#data_struct_fields),*
+        #[derive(::fluent_web_client::internal::Derivative)]
+        #[derivative(Clone(bound = ""))]
+        struct __Fluid_Data #ty_generics {
+            #(#data_struct_fields)*
+            _p: #phantom
         }
 
-        #[derive(Default)]
-        struct __Fluid_Reactive_Functions {
-            #(#reactive_updates),*
+        #[derive(::fluent_web_client::internal::Derivative)]
+        #[derivative(Default(bound = ""))]
+        struct __Fluid_Reactive_Functions #impl_generics #where_clauses {
+            #(#reactive_updates)*
+            _p: #phantom
         }
 
-        #[derive(Clone)]
-        pub struct Component {
+        #[derive(::fluent_web_client::internal::Derivative)]
+        #[derivative(Clone(bound = ""))]
+        pub struct Component #generic_def {
             root_name: ::std::string::String,
-            data: __Fluid_Data,
-            updates: ::std::rc::Rc<::std::cell::RefCell<__Fluid_Reactive_Functions>>,
+            data: __Fluid_Data #ty_generics,
+            updates: ::std::rc::Rc<::std::cell::RefCell<__Fluid_Reactive_Functions #ty_generics>>,
         }
 
-        impl Component {
+        trait __Fluent_Event #ty_generics : ::fluent_web_client::internal::serde::Serialize + for<'a> ::fluent_web_client::internal::serde::Deserialize<'a> {
+            const NAME: &'static str;
+            type Wrapper : ::fluent_web_client::internal::serde::Serialize + for<'a> ::fluent_web_client::internal::serde::Deserialize<'a>;
+            fn wrap(self) -> Self::Wrapper;
+        }
+
+        #events
+
+        pub mod __Fluent_Events {
+            #wrappers
+        }
+
+        impl #impl_generics Component #ty_generics #where_clauses {
+            #wrappers_type
+
             #(#subcomponent_defs)*
             #(#reactive_update_defs)*
             #(#conditional_defs)*
             #(#event_set_defs)*
 
-            fn detect_reads(&self, f: fn(&Component)) {
+            fn detect_reads(&self, f: fn(&Component #ty_generics)) {
                 let mut __Fluent_Updates = self.updates.borrow_mut();
                 #unpack_change_detector
                 #(#read_updates)*
@@ -1055,7 +1271,7 @@ fn compile_fluent_file(
                 let mut __Fluent_Updates = self.updates.borrow_mut();
                 #unpack_change_detector
 
-                let mut __Fluent_Functions: ::std::collections::HashSet<fn(&Component)> = ::std::collections::HashSet::new();
+                let mut __Fluent_Functions: ::std::collections::HashSet<fn(&Component #ty_generics)> = ::std::collections::HashSet::new();
                 #(#write_updates)*
 
                 ::std::mem::drop(__Fluent_Updates);
@@ -1064,9 +1280,22 @@ fn compile_fluent_file(
                     func(self);
                 }
             }
+
+            // It should be fine with mutliple borrows as parent components will be the ones borrowing.
+            fn emit<__Fluent_E: __Fluent_Event #ty_generics>(&self, event: __Fluent_E) {
+                use ::fluent_web_client::internal::web_sys;
+
+                let root_element = ::fluent_web_client::internal::get_by_id(&self.root_name);
+                let data = ::fluent_web_client::internal::serde_wasm_bindgen::to_value(&event.wrap()).unwrap();
+                let event = web_sys::CustomEvent::new_with_event_init_dict(
+                    __Fluent_E::NAME,
+                    &web_sys::CustomEventInit::new().detail(&data)
+                ).unwrap();
+                root_element.dispatch_event(&event).unwrap();
+            }
         }
 
-        impl ::fluent_web_client::internal::Component for Component {
+        impl #impl_generics ::fluent_web_client::internal::Component for Component #ty_generics #where_clauses {
             fn render_init(&self) -> ::std::string::String {
                 let root = &self.root_name;
                 format!(#html_content)
@@ -1076,7 +1305,8 @@ fn compile_fluent_file(
                 Self {
                     root_name: root_id,
                     data: __Fluid_Data {
-                        #(#data_create_fields),*
+                        #(#data_create_fields)*
+                        _p: std::marker::PhantomData,
                     },
                     updates: ::std::rc::Rc::new(::std::cell::RefCell::new(__Fluid_Reactive_Functions::default())),
                 }
