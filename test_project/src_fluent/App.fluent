@@ -1,10 +1,12 @@
-<template>
-    <input type="checkbox" checked :click="*hide = element.checked()">
-    <input =type='
-    if hide { "password" } else { "text" }
-    ' value="SecretPassword">
-</template>
+<define>
+use super::Input;
+</define>
 
 <data>
-let mut hide: bool = true;
+let mut value: f32 = 0.0;
 </data>
+
+<template>
+    <component src="Input<f32>" @input="*value = event.value"></component>
+    Double: {*value * 2.0}
+</template>
