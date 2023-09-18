@@ -1,9 +1,10 @@
 #![feature(inherent_associated_types)]
-#[allow(incomplete_features)]
+#![allow(incomplete_features)]
+
 use fluent_web_client::component;
 
 component!(App);
-component!(Input);
+component!(Sub);
 
 fn main() {
     console_error_panic_hook::set_once();

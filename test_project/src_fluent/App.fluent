@@ -1,12 +1,12 @@
 <define>
-use super::Input;
+use super::Sub;
 </define>
 
-<data>
-let mut value: f32 = 0.0;
-</data>
-
 <template>
-    <component src="Input<f32>" @input="*value = event.value"></component>
-    Double: {*value * 2.0}
+    <button :click="*value += 1">+1</button>
+    <component src="Sub" @value="*value"></component>
 </template>
+
+<data>
+let mut value: u32 = 0;
+</data>

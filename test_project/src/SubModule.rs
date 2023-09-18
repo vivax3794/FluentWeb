@@ -2,11 +2,10 @@
 use ::fluent_web_client::internal::web_sys::*;
 use ::fluent_web_client::internal::DomDisplay;
 use ::fluent_web_client::internal::UseInEvent;
-use super::Sub;
 #[derive(::fluent_web_client::internal::Derivative)]
 #[derivative(Clone(bound = ""))]
 struct __Fluid_Data {
-    value: ::fluent_web_client::internal::ChangeDetector<u32>,
+    value: ::fluent_web_client::internal::ChangeDetector<i32>,
     _p: ::std::marker::PhantomData<()>,
 }
 #[derive(::fluent_web_client::internal::Derivative)]
@@ -32,87 +31,23 @@ trait __Fluent_Event: ::fluent_web_client::internal::serde::Serialize + for<'a> 
 }
 pub mod __Fluent_Events {}
 impl Component {
-    fn spawn_component___Fluent_UUID_8cdb7b08_73af_47ff_9521_3cd5dfa17754(&self) {
-        let __Fluent_Elements = ::fluent_web_client::internal::get_elements(
-            &self.root_name,
-            ".__Fluent_UUID_8cdb7b08_73af_47ff_9521_3cd5dfa17754.__Fluent_Needs_Init",
-        );
-        for __Fluent_Element in __Fluent_Elements.into_iter() {
-            let __Fluent_Id = ::fluent_web_client::internal::uuid();
-            __Fluent_Element.set_id(&__Fluent_Id);
-            ::fluent_web_client::render_component::<Sub>(&__Fluent_Id);
-        }
-    }
-    fn update_attribute___Fluent_UUID_936083bf_2042_4674_92cd_7e75ce98e341(&self) {
+    fn update_element___Fluent_UUID_f7dc3383_d7c6_4ee3_b792_07d985e209a3(&self) {
         let __Fluid_Data { value, .. } = self.data.clone();
         let value = value.borrow();
         let __Fluent_Elements = ::fluent_web_client::internal::get_elements(
             &self.root_name,
-            ".__Fluent_UUID_b330eccd_80c2_48f9_856c_3651bcf3e8ec",
+            ".__Fluent_UUID_f7dc3383_d7c6_4ee3_b792_07d985e209a3",
         );
         for __Fluent_Element in __Fluent_Elements.into_iter() {
+            let __Fluent_Text = &::std::format!(
+                "{}", ::fluent_web_client::internal::display(& (value))
+            );
             __Fluent_Element
-                .set_attribute(
-                    "value",
-                    {
-                        let __Fluent_Value = *value;
-                        let __Fluent_Bytes = ::fluent_web_client::internal::bincode::serialize(
-                                &__Fluent_Value,
-                            )
-                            .unwrap();
-                        use ::fluent_web_client::internal::base64::engine::Engine;
-                        &::fluent_web_client::internal::base64::engine::general_purpose::STANDARD_NO_PAD
-                            .encode(__Fluent_Bytes)
-                    },
-                )
-                .unwrap();
+                .set_text_content(::std::option::Option::Some(__Fluent_Text));
         }
         self.detect_reads(
-            Component::update_attribute___Fluent_UUID_936083bf_2042_4674_92cd_7e75ce98e341,
+            Component::update_element___Fluent_UUID_f7dc3383_d7c6_4ee3_b792_07d985e209a3,
         );
-    }
-    fn set_event___Fluent_UUID_e0b7d67b_f09e_43f1_beca_3be4dbd7da6d_interal(
-        self,
-        __Fluent_Element: ::fluent_web_client::internal::web_sys::Element,
-    ) {
-        use ::fluent_web_client::internal::wasm_bindgen::JsCast;
-        let __Fluent_Element: &::fluent_web_client::internal::web_sys::HtmlButtonElement = __Fluent_Element
-            .dyn_ref()
-            .unwrap();
-        let element = __Fluent_Element.clone();
-        let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<
-            dyn Fn(_),
-        >::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
-            let event = event
-                .dyn_ref::<::fluent_web_client::internal::web_sys::Event>()
-                .unwrap();
-            {
-                let __Fluid_Data { value, .. } = self.data.clone();
-                let mut value = value.borrow_mut();
-                { *value += 1 };
-            }
-            use ::fluent_web_client::internal::Component;
-            self.update_changed_values();
-        });
-        __Fluent_Element
-            .add_event_listener_with_callback(
-                "click",
-                __Fluent_Function.as_ref().unchecked_ref(),
-            )
-            .unwrap();
-        __Fluent_Function.forget();
-    }
-    fn set_event___Fluent_UUID_e0b7d67b_f09e_43f1_beca_3be4dbd7da6d(&self) {
-        let __Fluent_Elements = ::fluent_web_client::internal::get_elements(
-            &self.root_name,
-            ".__Fluent_UUID_f4317371_61ec_4a62_8db1_3381f42f2f9e",
-        );
-        for __Fluent_Element in __Fluent_Elements.into_iter() {
-            self.clone()
-                .set_event___Fluent_UUID_e0b7d67b_f09e_43f1_beca_3be4dbd7da6d_interal(
-                    __Fluent_Element,
-                );
-        }
     }
     fn detect_reads(&self, f: fn(&Component)) {
         let mut __Fluent_Updates = self.updates.borrow_mut();
@@ -155,6 +90,17 @@ impl Component {
     }
     fn update_props(&self) {
         let element = ::fluent_web_client::internal::get_by_id(&self.root_name);
+        if let Some(value) = element.get_attribute("value") {
+            use ::fluent_web_client::internal::base64::engine::Engine;
+            let decoded = ::fluent_web_client::internal::base64::engine::general_purpose::STANDARD_NO_PAD
+                .decode(value)
+                .unwrap();
+            let deserialized = ::fluent_web_client::internal::bincode::deserialize(
+                    &decoded,
+                )
+                .unwrap();
+            *self.data.value.borrow_mut() = deserialized;
+        }
         self.update_changed_values();
     }
     fn emit<__Fluent_E: __Fluent_Event>(&self, event: __Fluent_E) {
@@ -177,7 +123,7 @@ impl ::fluent_web_client::internal::Component for Component {
     fn render_init(&self) -> ::std::string::String {
         let root = &self.root_name;
         ::std::format!(
-            "<button class=\" __Fluent_UUID_f4317371_61ec_4a62_8db1_3381f42f2f9e\">+1</button>\n    <div class=\" __Fluent_UUID_8cdb7b08_73af_47ff_9521_3cd5dfa17754 __Fluent_Needs_Init __Fluent_UUID_b330eccd_80c2_48f9_856c_3651bcf3e8ec\"></div>\n<style></style>"
+            "<h1><span class=\"__Fluent_UUID_f7dc3383_d7c6_4ee3_b792_07d985e209a3\"></span></h1>\n<style></style>"
         )
     }
     fn create(root_id: String) -> Self {
@@ -193,13 +139,10 @@ impl ::fluent_web_client::internal::Component for Component {
         }
     }
     fn setup_events(&self) {
-        self.set_event___Fluent_UUID_e0b7d67b_f09e_43f1_beca_3be4dbd7da6d();
         self.setup_watcher();
     }
     fn update_all(&self) {
-        self.update_attribute___Fluent_UUID_936083bf_2042_4674_92cd_7e75ce98e341();
+        self.update_element___Fluent_UUID_f7dc3383_d7c6_4ee3_b792_07d985e209a3();
     }
-    fn spawn_sub(&self) {
-        self.spawn_component___Fluent_UUID_8cdb7b08_73af_47ff_9521_3cd5dfa17754();
-    }
+    fn spawn_sub(&self) {}
 }

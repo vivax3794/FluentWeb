@@ -5,9 +5,11 @@ use std::{
     rc::Rc,
 };
 
+pub use base64;
+pub use bincode;
 pub use derivative::Derivative;
+pub use js_sys;
 pub use serde;
-pub use serde_wasm_bindgen;
 pub use wasm_bindgen;
 pub use web_sys;
 
