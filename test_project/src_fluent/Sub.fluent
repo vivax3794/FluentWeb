@@ -1,7 +1,0 @@
-<template>
-    <h1>{value}</h1>
-</template>
-
-<props>
-let mut value: i32 = 0;
-</props>

@@ -1,8 +1,0 @@
-[[hooks]]
-stage = "pre_build"
-command = "cargo"
-command_arguments = ["run", "--manifest-path", "../fluent_web/Cargo.toml"]
-
-[watch]
-ignore = ["src"]
-watch = ["../fluent_web/src", "src_fluent"]

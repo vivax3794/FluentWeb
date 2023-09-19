@@ -1,0 +1,95 @@
+[config]
+skip_core_tasks = true
+
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+
+[tasks.tests]
+clear = true
+workspace = false
+dependencies = ["integration_tests"]
+
+[tasks.build_tool]
+workspace = false
+cwd = "./fluent_web"
+command = "cargo"
+args = ["build"]
+
+[tasks.integration_tests.env]
+FLUENT_WEB_BINARY = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/debug/fluent_web"
+TEST_TEMPLATE = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/TestTemplate"
+TEST_TMP_DIR = "${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/TEST_FOLDER"
+
+[tasks.integration_tests]
+workspace = false
+dependencies = ["build_tool", "setup_base_test_dir"]
+script = '''
+cleanup() {
+  kill -2 $DRIVER_PID || true
+  kill -2 $BROWSER_PID || true
+  echo "KILLED BROWSER & DRIVER"
+}
+
+# Trap the EXIT signal to run cleanup function
+trap cleanup EXIT
+
+chromium-browser --remote-debugging-port=9000 >/dev/null 2>&1 &
+BROWSER_PID=$!
+
+chromedriver >/dev/null 2>&1 &
+DRIVER_PID=$!
+
+echo "BROWSER PID: $BROWSER_PID"
+echo "DRIVER PID: $DRIVER_PID"
+
+for test in ./tests/*/
+do
+    (cd ${test}; cargo make --makefile ../../Makefile.toml run_int_test)
+done
+'''
+
+[tasks.create_test_dir]
+command = "mkdir"
+args = ["--parents", "TEST_FOLDER"]
+
+[tasks.setup_base_test_dir]
+dependencies = ["create_test_dir"]
+script = "cp -vr TestTemplate/* TEST_FOLDER"
+
+[tasks.run_int_test]
+dependencies = ["compile_test_fluent"]
+script = '''
+# Function to kill the web server
+cleanup() {
+  kill -2 $WEB_SERVER_PID || true
+  echo "KILLED TRUNK & BROWSER & DRIVER"
+}
+
+# Trap the EXIT signal to run cleanup function
+trap cleanup EXIT
+
+(cd ${TEST_TMP_DIR}; trunk build)
+(cd ${TEST_TMP_DIR}; trunk serve --no-autoreload) &
+WEB_SERVER_PID=$!
+echo "TRUNK PID: $WEB_SERVER_PID"
+
+echo "RUNNING TESTS:"
+cargo make --makefile ../../Makefile.toml run_test_rs
+
+# The trap will take care of killing the web server
+exit $?
+'''
+
+[tasks.setup_test_dir]
+script = '''
+cp -vr src_fluent ${TEST_TMP_DIR}
+'''
+
+[tasks.compile_test_fluent]
+dependencies = ["setup_test_dir"]
+cwd = "${TEST_TMP_DIR}"
+command = "${FLUENT_WEB_BINARY}"
+
+[tasks.run_test_rs]
+command = "cargo"
+args = ["nextest", "run", "-j", "1"]
