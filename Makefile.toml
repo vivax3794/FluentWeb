@@ -42,10 +42,24 @@ DRIVER_PID=$!
 echo "BROWSER PID: $BROWSER_PID"
 echo "DRIVER PID: $DRIVER_PID"
 
-for test in ./tests/*/
-do
-    (cd ${test}; cargo make --makefile ../../Makefile.toml run_int_test)
-done
+# Check if arguments are provided
+if [ "$#" -eq 0 ]; then
+    # No arguments provided, loop through all directories in ./tests/
+    for test in ./tests/*/
+    do
+        echo "Running test in directory: $test"
+        (cd ${test}; cargo make --makefile ../../Makefile.toml run_int_test)
+    done
+else
+    # Arguments provided, loop through directories specified as arguments
+    for arg in "$@"
+    do
+        test="./tests/$arg"
+        echo "Running test in directory: $test"
+        (cd ${test}; cargo make --makefile ../../Makefile.toml run_int_test)
+    done
+fi
+
 '''
 
 [tasks.create_test_dir]
@@ -62,7 +76,7 @@ script = '''
 # Function to kill the web server
 cleanup() {
   kill -2 $WEB_SERVER_PID || true
-  echo "KILLED TRUNK & BROWSER & DRIVER"
+  echo "KILLED TRUNK"
 }
 
 # Trap the EXIT signal to run cleanup function

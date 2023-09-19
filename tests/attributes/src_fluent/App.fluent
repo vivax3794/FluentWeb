@@ -1,0 +1,12 @@
+<template>
+    <input id="CHECK" type="checkbox" :click="*value = element.checked()">
+
+    <p id="A" ?hidden="*value">Conditional Attribute</p>
+    <p id="B" =val="*value">Computed Attribute</p>
+    
+    <component src="super::Sub" @val="*value"></component>
+</template>
+
+<data>
+let mut value: bool = false;
+</data>

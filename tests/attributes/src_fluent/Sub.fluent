@@ -1,0 +1,9 @@
+<template>
+    <p id="C">{*val}</p>
+    <p id="D">{*no_val}</p>
+</template>
+
+<props>
+let mut val: bool = false;
+let mut no_val: i32 = 10;
+</props>

@@ -1,0 +1,11 @@
+<generic>
+<T: Default + UseInEvent + 'static>
+</generic>
+
+<events>
+pub struct click<T>(pub T);
+</events>
+
+<template>
+    <button :click="self.emit(click(T::default()))"></button>
+</template>
