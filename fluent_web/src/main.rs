@@ -579,7 +579,7 @@ struct EventListener {
     /// The event to handle
     handler: String,
     /// Code block for the event handler
-    code: syn::Block,
+    code: syn::ExprClosure,
     /// The type of element
     element: String,
     event_component: Option<proc_macro2::TokenStream>,
@@ -631,7 +631,7 @@ fn find_event_listeners_and_set_class(
                         attributes.remove(format!(":{event}"));
 
                         let code =
-                            syn::parse_str(&format!("{{{code}}}"))
+                            syn::parse_str(&code)
                                 .expect(
                                     "event handler to be valid code.",
                                 );
@@ -684,6 +684,8 @@ fn compile_event_listener(
         element,
         event_component,
     } = event;
+    let mut code = code.clone();
+
     let function_name = quote::format_ident!("set_event_{}", uuid());
     let function_name_internal =
         quote::format_ident!("{}_interal", function_name);
@@ -709,18 +711,35 @@ fn compile_event_listener(
         let event_name =
             quote::format_ident!("__Fluent_Event_{}", handler);
         let event_type = quote!(#component_path::#event_name);
+
+        let first = code.inputs.first_mut().expect("argument");
+        *first = syn::Pat::Type(syn::PatType {
+            attrs: vec![],
+            pat: Box::new(first.clone()),
+            colon_token: <syn::Token![:]>::default(),
+            ty: Box::new(syn::parse_quote!(#event_type::Parent)),
+        });
+
         quote!(
             let __Fluent_Custom_Event = event.dyn_ref::<::fluent_web_client::internal::web_sys::CustomEvent>().unwrap();
             let __Fluent_Details = __Fluent_Custom_Event.detail();
             let __Fluent_Details = __Fluent_Details.dyn_ref::<::fluent_web_client::internal::js_sys::Uint8Array>().unwrap();
-            let event: #event_type = ::fluent_web_client::internal::bincode::deserialize(&__Fluent_Details.to_vec()).unwrap();
-            let event = event.0;
+            let __Fluent_Event: #event_type = ::fluent_web_client::internal::bincode::deserialize(&__Fluent_Details.to_vec()).unwrap();
+            let __Fluent_Event = __Fluent_Event.0;
         )
     } else {
         // Just ask people to downcast it themself?
         let event_type = quote::format_ident!("Event");
-        quote!(let event = event.dyn_ref::<::fluent_web_client::internal::web_sys::#event_type>().unwrap();)
+        quote!(let __Fluent_Event = event.dyn_ref::<::fluent_web_client::internal::web_sys::#event_type>().unwrap();)
     };
+
+    let second = &mut code.inputs[1];
+    *second = syn::Pat::Type(syn::PatType {
+        attrs: vec![],
+        pat: Box::new(second.clone()),
+        colon_token: <syn::Token![:]>::default(),
+        ty: Box::new(syn::parse_quote!(&#element_type)),
+    });
 
     let selector = format!(".{}", id);
     let set_event_handler = quote!(
@@ -728,13 +747,13 @@ fn compile_event_listener(
             use ::fluent_web_client::internal::wasm_bindgen::JsCast;
 
             let __Fluent_Element: &::fluent_web_client::internal::web_sys::#element_type = __Fluent_Element.dyn_ref().unwrap();
-            let element = __Fluent_Element.clone();
+            let __Fluent_Element_Clone = __Fluent_Element.clone();
 
             let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
                 #event_reading
                 {
                     #unpack_mut
-                    #code;
+                    (#code)(__Fluent_Event, &__Fluent_Element_Clone);
                 }
                 use ::fluent_web_client::internal::Component;
                 self.update_changed_values();
@@ -976,6 +995,9 @@ fn compile_events(
                 )]
                 #[serde(crate="::fluent_web_client::internal::serde")]
                 pub struct #ident #generics_ty (pub super::#ident #used_generics, pub #phantom);
+                impl #generics_ty #ident #generics_ty #generics_where {
+                    pub type Parent = super::#ident #used_generics;
+                }
             );
             let event_name = quote::format_ident!("__Fluent_Event_{}", ident);
             let wrapper_type = quote!(pub type #event_name = __Fluent_Events::#ident #generics_ty;);

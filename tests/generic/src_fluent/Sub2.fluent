@@ -7,5 +7,5 @@ pub struct click<T>(pub T);
 </events>
 
 <template>
-    <button :click="self.emit(click(T::default()))"></button>
+    <button :click="|_, _| self.emit(click(T::default()))"></button>
 </template>

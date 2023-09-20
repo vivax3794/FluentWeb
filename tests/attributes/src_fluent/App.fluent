@@ -1,5 +1,5 @@
 <template>
-    <input id="CHECK" type="checkbox" :click="*value = element.checked()">
+    <input id="CHECK" type="checkbox" :click="|event, element| *value = element.checked()">
 
     <p id="A" ?hidden="*value">Conditional Attribute</p>
     <p id="B" =val="*value">Computed Attribute</p>

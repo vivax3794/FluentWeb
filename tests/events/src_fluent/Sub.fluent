@@ -1,5 +1,5 @@
 <template>
-    <button id="SUB_TARGET" :click="self.emit(click(10))"></button>
+    <button id="SUB_TARGET" :click="|event, element| self.emit(click(10))"></button>
 </template>
 
 <events>

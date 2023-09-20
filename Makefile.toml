@@ -47,7 +47,7 @@ if [ "$#" -eq 0 ]; then
     # No arguments provided, loop through all directories in ./tests/
     for test in ./tests/*/
     do
-        echo "Running test in directory: $test"
+        echo "[ALL] Running test in directory: $test"
         (cd ${test}; cargo make --makefile ../../Makefile.toml run_int_test)
     done
 else
@@ -55,7 +55,7 @@ else
     for arg in "$@"
     do
         test="./tests/$arg"
-        echo "Running test in directory: $test"
+        echo "[ARGS] Running test in directory: $test"
         (cd ${test}; cargo make --makefile ../../Makefile.toml run_int_test)
     done
 fi
@@ -96,6 +96,7 @@ exit $?
 
 [tasks.setup_test_dir]
 script = '''
+rm -rv ${TEST_TMP_DIR}/src_fluent
 cp -vr src_fluent ${TEST_TMP_DIR}
 '''
 
