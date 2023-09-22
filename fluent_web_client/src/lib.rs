@@ -1,5 +1,5 @@
-#![feature(specialization)]
 #![allow(incomplete_features)]
+#![cfg_attr(feature = "nightly", feature(specialization))]
 
 #[doc(hidden)]
 pub mod internal;

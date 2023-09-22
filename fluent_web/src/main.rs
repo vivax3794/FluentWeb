@@ -687,7 +687,7 @@ fn compile_event_listener(
 
     let function_name = quote::format_ident!("set_event_{}", uuid());
     let function_name_internal =
-        quote::format_ident!("{}_interal", function_name);
+        quote::format_ident!("{}_internal", function_name);
 
     let element = element.clone();
     let element = if event_component.is_none() {

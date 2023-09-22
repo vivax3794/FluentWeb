@@ -5,6 +5,8 @@
     <span id ="OTHER_TARGET">{other_value}</span>
 
     <input :click="|_, element| dbg!(element.value())"></button>
+
+    
 </template>
 
 <data>

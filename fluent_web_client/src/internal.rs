@@ -101,6 +101,7 @@ pub trait DomDisplay {
     fn dom_display(&self) -> String;
 }
 
+#[cfg(feature = "nightly")]
 impl<T> DomDisplay for T
 where
     T: Debug,

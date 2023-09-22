@@ -18,7 +18,7 @@ async fn test_simple_with_default() -> WebDriverResult<()> {
     assert_eq!(u8_element.text().await?, "0");
 
     let option_element = driver.find(By::Id("A2")).await?;
-    assert_eq!(option_element.text().await?, "None");
+    assert_eq!(option_element.text().await?, "false");
 
     Ok(())
 }
@@ -39,7 +39,7 @@ async fn test_default() -> WebDriverResult<()> {
     let p = element.find(By::Tag("p")).await?;
 
     button.click().await?;
-    assert_eq!(p.text().await?, "None");
+    assert_eq!(p.text().await?, "false");
 
     Ok(())
 }
@@ -53,7 +53,7 @@ async fn test_props() -> WebDriverResult<()> {
     assert_eq!(u8_element.text().await?, "100");
 
     let option_element = driver.find(By::Id("C2")).await?;
-    assert_eq!(option_element.text().await?, "Some(100)");
+    assert_eq!(option_element.text().await?, "true");
 
     Ok(())
 }
