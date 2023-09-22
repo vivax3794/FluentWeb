@@ -1,12 +1,10 @@
-#![feature(inherent_associated_types)]
+use fluent_web_client::render_component;
 
-use fluent_web_client::{component, render_component};
-
-component!(App);
-component!(Sub1);
-component!(Sub2);
-component!(Sub3);
+mod App;
+mod Sub1;
+mod Sub2;
+mod Sub3;
 
 fn main() {
-    render_component::<App>("mount");
+    render_component!(App, "mount");
 }

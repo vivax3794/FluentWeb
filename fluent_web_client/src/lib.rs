@@ -4,33 +4,15 @@
 #[doc(hidden)]
 pub mod internal;
 
-pub fn render_component<C: internal::Component>(mount_point: &str) {
-    let window = web_sys::window().unwrap();
-    let document = window.document().unwrap();
-    let element = document.get_element_by_id(mount_point).unwrap();
-
-    element.class_list().add_1("__Fluent_Component").unwrap();
-    element
-        .class_list()
-        .remove_1("__Fluent_Needs_Init")
-        .unwrap();
-
-    let component = C::create(mount_point.to_owned());
-    element.set_inner_html(&component.render_init());
-    component.setup_events();
-    component.spawn_sub();
-    component.update_all();
-}
-
 #[doc(hidden)]
 pub use paste::paste;
 
 #[macro_export]
-macro_rules! component {
-    ($vis:vis $name:ident) => {
-        ::fluent_web_client::paste! {
-            mod [<$name Module>];
-            $vis use [<$name Module>]::Component as $name;
-        }
+macro_rules! render_component {
+    ($($path:ident)::* , $id:expr) => {
+        $crate::internal::render_component::<$($path)::*::Component>($id);
+    };
+    ($($path:ident)::* < $($generic:ty),* >, $id:expr) => {
+        $crate::internal::render_component::<$($path)::*::Component<$($generic),*>>($id);
     };
 }

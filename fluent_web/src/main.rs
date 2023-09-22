@@ -70,7 +70,6 @@ fn process_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
             fs::copy(source, dst)?;
         }
         "fluent" => {
-            // App.fluent => AppModule.rs
             let name = dst
                 .file_name()
                 .expect("Could not find filename")
@@ -81,7 +80,7 @@ fn process_file(source: PathBuf, dst: PathBuf) -> anyhow::Result<()> {
                 .split('.')
                 .next()
                 .expect("Expected dot in filename");
-            let component_file = format!("{component_name}Module.rs");
+            let component_file = format!("{component_name}.rs");
             compile_fluent_file(
                 source,
                 dst.with_file_name(component_file),
@@ -463,7 +462,7 @@ fn create_spawn_and_spawn_call_for_subcomponent(
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 let __Fluent_Id = ::fluent_web_client::internal::uuid();
                 __Fluent_Element.set_id(&__Fluent_Id);
-                ::fluent_web_client::render_component::<#component_name>(&__Fluent_Id);
+                ::fluent_web_client::render_component!(#component_name, &__Fluent_Id);
             }
         }
     );
@@ -708,16 +707,29 @@ fn compile_event_listener(
 
     let event_reading = if let Some(component_path) = event_component
     {
-        let event_name =
-            quote::format_ident!("__Fluent_Event_{}", handler);
-        let event_type = quote!(#component_path::#event_name);
+        let component_path: syn::Path =
+            syn::parse2(component_path.clone()).expect("Valid path");
+        let mut segments = component_path.segments.into_iter();
+        let last = segments
+            .next_back()
+            .expect("component segment not to be empty");
+        let mut segments =
+            segments.map(|p| quote!(#p)).collect::<Vec<_>>();
+
+        let syn::PathSegment {
+            ident, arguments, ..
+        } = last;
+        segments.push(quote!(#ident));
+
+        let event_name = quote::format_ident!("{}", handler);
+        let event_type = quote!(<#(#segments)::* ::__Fluent_Events:: #event_name #arguments as ::fluent_web_client::internal::EventWrapper>::Real);
 
         let first = code.inputs.first_mut().expect("argument");
         *first = syn::Pat::Type(syn::PatType {
             attrs: vec![],
             pat: Box::new(first.clone()),
             colon_token: <syn::Token![:]>::default(),
-            ty: Box::new(syn::parse_quote!(#event_type::Parent)),
+            ty: Box::new(syn::parse_quote!(#event_type)),
         });
 
         quote!(
@@ -725,7 +737,6 @@ fn compile_event_listener(
             let __Fluent_Details = __Fluent_Custom_Event.detail();
             let __Fluent_Details = __Fluent_Details.dyn_ref::<::fluent_web_client::internal::js_sys::Uint8Array>().unwrap();
             let __Fluent_Event: #event_type = ::fluent_web_client::internal::bincode::deserialize(&__Fluent_Details.to_vec()).unwrap();
-            let __Fluent_Event = __Fluent_Event.0;
         )
     } else {
         // Just ask people to downcast it themself?
@@ -959,12 +970,8 @@ fn compile_events(
     generics_ty: &proc_macro2::TokenStream,
     generics_where: &proc_macro2::TokenStream,
     phantom: &proc_macro2::TokenStream,
-) -> (
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-) {
-    let (events, wrappers, wrapper_types): (Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(events
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let (events, wrappers): (Vec<_>, Vec<_>) = itertools::multiunzip(events
         .into_iter()
         .map(|item| {
             let (used_generics, _, _) = item.generics.split_for_impl();
@@ -977,15 +984,8 @@ fn compile_events(
                 )]
                 #[serde(crate="::fluent_web_client::internal::serde")]
                 #item
-                impl #generics_impl __Fluent_Event #generics_ty for #ident #used_generics #generics_where {
+                impl #generics_impl ::fluent_web_client::internal::Event for #ident #used_generics #generics_where {
                     const NAME: &'static str = #ident_string;
-                    type Wrapper = __Fluent_Events::#ident #generics_ty;
-                    fn wrap(self) -> Self::Wrapper {
-                        __Fluent_Events::#ident(
-                            self,
-                            ::std::marker::PhantomData,
-                        )
-                    }
                 }
             );
             let wrapper = quote!(
@@ -995,20 +995,14 @@ fn compile_events(
                 )]
                 #[serde(crate="::fluent_web_client::internal::serde")]
                 pub struct #ident #generics_ty (pub super::#ident #used_generics, pub #phantom);
-                impl #generics_ty #ident #generics_ty #generics_where {
-                    pub type Parent = super::#ident #used_generics;
+                impl #generics_ty ::fluent_web_client::internal::EventWrapper for #ident #generics_ty #generics_where {
+                    type Real = super::#ident #used_generics;
                 }
             );
-            let event_name = quote::format_ident!("__Fluent_Event_{}", ident);
-            let wrapper_type = quote!(pub type #event_name = __Fluent_Events::#ident #generics_ty;);
-            (main, wrapper, wrapper_type)
+            (main, wrapper)
         }));
 
-    (
-        quote!(#(#events)*),
-        quote!(#(#wrappers)*),
-        quote!(#(#wrapper_types)*),
-    )
+    (quote!(#(#events)*), quote!(#(#wrappers)*))
 }
 
 struct ReactiveAttributeInfo {
@@ -1380,7 +1374,7 @@ fn compile_fluent_file(
         targets: data_targets,
     } = compile_data_section(&data_statements, &ty_generics);
 
-    let (events, wrappers, wrappers_type) = compile_events(
+    let (events, wrappers) = compile_events(
         parse_events(&source_content),
         &impl_generics,
         &ty_generics,
@@ -1522,12 +1516,6 @@ fn compile_fluent_file(
             updates: ::std::rc::Rc<::std::cell::RefCell<__Fluid_Reactive_Functions #ty_generics>>,
         }
 
-        trait __Fluent_Event #ty_generics : ::fluent_web_client::internal::serde::Serialize + for<'a> ::fluent_web_client::internal::serde::Deserialize<'a> {
-            const NAME: &'static str;
-            type Wrapper : ::fluent_web_client::internal::serde::Serialize + for<'a> ::fluent_web_client::internal::serde::Deserialize<'a>;
-            fn wrap(self) -> Self::Wrapper;
-        }
-
         #events
 
         pub mod __Fluent_Events {
@@ -1535,8 +1523,6 @@ fn compile_fluent_file(
         }
 
         impl #impl_generics Component #ty_generics #where_clauses {
-            #wrappers_type
-
             #(#subcomponent_defs)*
             #(#reactive_update_defs)*
             #(#conditional_defs)*
@@ -1568,14 +1554,14 @@ fn compile_fluent_file(
             #update_props
 
             // It should be fine with mutliple borrows as parent components will be the ones borrowing.
-            fn emit<__Fluent_E: __Fluent_Event #ty_generics>(&self, event: __Fluent_E) {
+            fn emit<E: ::fluent_web_client::internal::Event>(&self, event: E) {
                 use ::fluent_web_client::internal::web_sys;
 
                 let root_element = ::fluent_web_client::internal::get_by_id(&self.root_name);
-                let data = ::fluent_web_client::internal::bincode::serialize(&event.wrap()).unwrap();
+                let data = ::fluent_web_client::internal::bincode::serialize(&event).unwrap();
                 let data = ::fluent_web_client::internal::js_sys::Uint8Array::from(data.as_slice());
                 let event = web_sys::CustomEvent::new_with_event_init_dict(
-                    __Fluent_E::NAME,
+                    E::NAME,
                     &web_sys::CustomEventInit::new().detail(&data)
                 ).unwrap();
                 root_element.dispatch_event(&event).unwrap();

@@ -1,24 +1,24 @@
 <template>
     <div id="A1">
-        <component src="super::Sub1::<u8>"></component>
+        <component src="super::Sub1<u8>"></component>
     </div>
     <div id="A2">
-        <component src="super::Sub1::<Option<u8>>"></component>
+        <component src="super::Sub1<Option<u8>>"></component>
     </div>
 
     <div id="B1">
-        <component src="super::Sub2::<u8>" ;click="|event, _| *b1 = event.0"></component>
+        <component src="super::Sub2<u8>" ;click="|event, _| *b1 = event.0"></component>
         <p>{b1}</p>
     </div>
     <div id="B2">
-        <component src="super::Sub2::<Option<u8>>" ;click="|event, _| *b2 = event.0"></component>
+        <component src="super::Sub2<Option<u8>>" ;click="|event, _| *b2 = event.0"></component>
         <p>{b2}</p>
     </div>
     <div id="C1">
-        <component src="super::Sub3::<u8>" @value="100"></component>
+        <component src="super::Sub3<u8>" @value="100"></component>
     </div>
     <div id="C2">
-        <component src="super::Sub3::<Option<u8>>" @value="Some(100)"></component>
+        <component src="super::Sub3<Option<u8>>" @value="Some(100)"></component>
     </div>
 </template>
 

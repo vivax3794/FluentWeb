@@ -1,7 +1,7 @@
-use fluent_web_client::{component, render_component};
+use fluent_web_client::render_component;
 
-component!(App);
+mod App;
 
 fn main() {
-    render_component::<App>("mount");
+    render_component!(App, "mount");
 }

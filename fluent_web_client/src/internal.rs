@@ -24,6 +24,24 @@ pub trait Component {
     fn update_all(&self);
 }
 
+pub fn render_component<C: Component>(mount_point: &str) {
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let element = document.get_element_by_id(mount_point).unwrap();
+
+    element.class_list().add_1("__Fluent_Component").unwrap();
+    element
+        .class_list()
+        .remove_1("__Fluent_Needs_Init")
+        .unwrap();
+
+    let component = C::create(mount_point.to_owned());
+    element.set_inner_html(&component.render_init());
+    component.setup_events();
+    component.spawn_sub();
+    component.update_all();
+}
+
 pub fn uuid() -> String {
     let id = uuid::Uuid::new_v4().to_string();
     format!("__Fluent_UUID_{id}")
@@ -219,4 +237,12 @@ pub trait UseInEvent:
 impl<T> UseInEvent for T where
     T: serde::Serialize + for<'a> serde::Deserialize<'a>
 {
+}
+
+pub trait EventWrapper {
+    type Real;
+}
+
+pub trait Event: UseInEvent {
+    const NAME: &'static str;
 }
