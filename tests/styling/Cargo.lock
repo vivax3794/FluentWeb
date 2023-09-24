@@ -813,14 +813,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simple_rendering"
-version = "0.1.0"
-dependencies = [
- "thirtyfour",
- "tokio",
-]
-
-[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -868,6 +860,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6aadc0801d92f0cdc26127c67c4b8766284f52a5ba22894f285e3101fa57d05d"
 dependencies = [
  "regex",
+]
+
+[[package]]
+name = "styling"
+version = "0.1.0"
+dependencies = [
+ "thirtyfour",
+ "tokio",
 ]
 
 [[package]]

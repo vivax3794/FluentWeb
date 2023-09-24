@@ -1,0 +1,10 @@
+<template>
+    <input id="BUTTON" types="checkbox" :click="|_, element| *value = element.checked()"></input>
+    <div $if="*value" id="SIMPLE">
+        Hello World!
+    </div>
+</template>
+
+<data>
+let mut value: bool = false;
+</data>

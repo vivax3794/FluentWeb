@@ -299,6 +299,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "generic"
+version = "0.1.0"
+dependencies = [
+ "thirtyfour",
+ "tokio",
+]
+
+[[package]]
 name = "gimli"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -810,14 +818,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.37",
-]
-
-[[package]]
-name = "simple_rendering"
-version = "0.1.0"
-dependencies = [
- "thirtyfour",
- "tokio",
 ]
 
 [[package]]

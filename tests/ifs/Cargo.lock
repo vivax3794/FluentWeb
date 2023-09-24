@@ -173,14 +173,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
-name = "events"
-version = "0.1.0"
-dependencies = [
- "thirtyfour",
- "tokio",
-]
-
-[[package]]
 name = "fantoccini"
 version = "0.19.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -427,6 +419,14 @@ checksum = "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c"
 dependencies = [
  "unicode-bidi",
  "unicode-normalization",
+]
+
+[[package]]
+name = "ifs"
+version = "0.1.0"
+dependencies = [
+ "thirtyfour",
+ "tokio",
 ]
 
 [[package]]

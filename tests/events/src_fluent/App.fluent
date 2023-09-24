@@ -5,7 +5,7 @@
     <span id ="OTHER_TARGET">{other_value}</span>
 
     <input :click="|_, element| dbg!(element.value())"></button>
-
+    <input :click="|event: &InputEvent, _| dbg!(event.input_type())"></button>
     
 </template>
 

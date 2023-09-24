@@ -1,3 +1,6 @@
+// This code is called by generated code and should always be sound.
+#![allow(clippy::unwrap_used)]
+
 use std::{
     cell::{Ref, RefCell, RefMut},
     fmt::{Debug, Display},
@@ -19,9 +22,9 @@ pub trait Component {
     fn render_init(&self) -> String;
     fn create(root_id: String) -> Self;
 
-    fn setup_events(&self);
-    fn spawn_sub(&self);
-    fn update_all(&self);
+    fn setup_events(&self, root: Option<String>);
+    fn spawn_sub(&self, root: Option<String>);
+    fn update_all(&self, root: Option<String>);
 }
 
 pub fn render_component<C: Component>(mount_point: &str) {
@@ -37,45 +40,49 @@ pub fn render_component<C: Component>(mount_point: &str) {
 
     let component = C::create(mount_point.to_owned());
     element.set_inner_html(&component.render_init());
-    component.setup_events();
-    component.spawn_sub();
-    component.update_all();
+    component.setup_events(None);
+    component.spawn_sub(None);
+    component.update_all(None);
 }
 
+#[must_use]
 pub fn uuid() -> String {
     let id = uuid::Uuid::new_v4().to_string();
     format!("__Fluent_UUID_{id}")
 }
 
+#[must_use]
 pub fn get_by_id(id: &str) -> web_sys::Element {
-    let selector = ::std::format!("#{}", id);
+    let selector = ::std::format!("#{id}");
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     document.query_selector(&selector).unwrap().unwrap()
 }
 
+#[must_use]
 pub fn get_element(
     component_id: &str,
     element_id: &str,
 ) -> web_sys::Element {
     let selector = ::std::format!(
-        "#{} #{}:not(#{} .__Fluent_Component *)",
-        component_id,
-        element_id,
-        component_id
+        "#{component_id} #{element_id}:not(#{component_id} .__Fluent_Component *)"
     );
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     document.query_selector(&selector).unwrap().unwrap()
 }
 
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
 pub fn get_elements(
     component_id: &str,
     selector: &str,
+    root_selector: Option<String>,
 ) -> Vec<web_sys::Element> {
     let selector = ::std::format!(
-        "#{} {}:not(#{} .__Fluent_Component *)",
+        "#{} {} {}:not(#{} .__Fluent_Component *)",
         component_id,
+        root_selector.unwrap_or_default(),
         selector,
         component_id
     );
@@ -116,13 +123,11 @@ impl<T> DomDisplay for T
 where
     T: Debug + Display,
 {
-    #[inline(always)]
     fn dom_display(&self) -> String {
-        format!("{}", self)
+        format!("{self}")
     }
 }
 
-#[inline(always)]
 pub fn display<T: DomDisplay>(value: &T) -> String {
     value.dom_display()
 }
@@ -131,7 +136,7 @@ pub fn log(msg: &str) {
     web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(msg));
 }
 
-#[derive(Derivative)]
+#[derive(Derivative, Debug)]
 #[derivative(Clone(bound = ""))]
 pub struct ChangeDetector<T> {
     value: Rc<RefCell<T>>,
@@ -148,10 +153,12 @@ impl<T> ChangeDetector<T> {
         }
     }
 
+    #[must_use]
     pub fn was_read(&self) -> bool {
         *self.read.borrow()
     }
 
+    #[must_use]
     pub fn was_written(&self) -> bool {
         *self.write.borrow()
     }
@@ -161,27 +168,31 @@ impl<T> ChangeDetector<T> {
         *self.write.borrow_mut() = false;
     }
 
+    #[must_use]
     pub fn borrow(&self) -> ChangeDetectorRead<T> {
         ChangeDetectorRead {
             value: self.value.borrow(),
-            read: self.read.clone(),
+            read: Rc::clone(&self.read),
         }
     }
 
+    #[must_use]
     pub fn borrow_mut(&self) -> ChangeDetectorWrite<T> {
         ChangeDetectorWrite {
             value: self.value.borrow_mut(),
-            read: self.read.clone(),
-            write: self.write.clone(),
+            read: Rc::clone(&self.read),
+            write: Rc::clone(&self.write),
         }
     }
 }
 
+#[derive(Debug)]
 pub struct ChangeDetectorRead<'a, T> {
     value: Ref<'a, T>,
     read: Rc<RefCell<bool>>,
 }
 
+#[derive(Debug)]
 pub struct ChangeDetectorWrite<'a, T> {
     value: RefMut<'a, T>,
     read: Rc<RefCell<bool>>,
@@ -217,14 +228,12 @@ impl<'a, T> DerefMut for ChangeDetectorWrite<'a, T> {
 // we use `**self` instead of `self.value` to trigger the updating of the `read` flag.
 
 impl<'a, T: DomDisplay> DomDisplay for ChangeDetectorRead<'a, T> {
-    #[inline(always)]
     fn dom_display(&self) -> String {
         (**self).dom_display()
     }
 }
 
 impl<'a, T: DomDisplay> DomDisplay for ChangeDetectorWrite<'a, T> {
-    #[inline(always)]
     fn dom_display(&self) -> String {
         (**self).dom_display()
     }

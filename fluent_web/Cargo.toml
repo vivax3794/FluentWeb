@@ -2,11 +2,13 @@
 name = "fluent_web"
 version = "0.1.0"
 edition = "2021"
+description = "SFC frontend web framework for rust!"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
+thiserror = "1.0.48"
 html5ever = "0.26.0"
 itertools = "0.11.0"
 kuchikiki = "0.8.2"
@@ -17,6 +19,7 @@ lightningcss = { version = "1.0.0-alpha.46", default-features = false, features 
 markup5ever = "0.11.0"
 prettyplease = "0.2.15"
 proc-macro2 = "1.0.67"
+template-quote = "0.3.0"
 quote = "1.0.33"
 syn = { version = "2.0.35", default-features = false, features = [
     "parsing",

@@ -33,7 +33,7 @@ cleanup() {
 # Trap the EXIT signal to run cleanup function
 trap cleanup EXIT
 
-chromium-browser --remote-debugging-port=9000 >/dev/null 2>&1 &
+chromium-browser --remote-debugging-port=9000 --user-data-dir=/tmp/CHROME_TESTS >/dev/null 2>&1 &
 BROWSER_PID=$!
 
 chromedriver >/dev/null 2>&1 &
