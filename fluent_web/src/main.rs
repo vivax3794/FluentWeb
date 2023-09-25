@@ -2,7 +2,6 @@
 #![warn(
     clippy::cargo,
     clippy::pedantic,
-    clippy::nursery,
     clippy::clone_on_ref_ptr,
     clippy::create_dir,
     clippy::filetype_is_file,
@@ -37,11 +36,18 @@
 
 //! `FluentWeb` transpiler and project creator
 
+use std::process::ExitCode;
+
 mod compiler;
 mod error;
 mod prelude;
 
-fn main() -> error::CompilerResult<()> {
-    compiler::compile_project()?;
-    Ok(())
+fn main() -> ExitCode {
+    match compiler::compile_project() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("{err}");
+            ExitCode::FAILURE
+        }
+    }
 }

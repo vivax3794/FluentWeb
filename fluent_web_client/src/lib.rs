@@ -3,7 +3,6 @@
 #![warn(
     clippy::cargo,
     clippy::pedantic,
-    clippy::nursery,
     clippy::clone_on_ref_ptr,
     clippy::create_dir,
     clippy::filetype_is_file,

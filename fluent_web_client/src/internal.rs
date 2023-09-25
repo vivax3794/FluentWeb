@@ -18,16 +18,36 @@ pub use web_sys;
 
 use wasm_bindgen::JsCast;
 
-pub trait Component {
+pub trait Component: Clone {
     fn render_init(&self) -> String;
     fn create(root_id: String) -> Self;
 
     fn setup_events(&self, root: Option<String>);
     fn spawn_sub(&self, root: Option<String>);
     fn update_all(&self, root: Option<String>);
+    fn update_props(&self);
+
+    fn setup_watcher(component: Self, root_name: &str)
+    where
+        Self: 'static,
+    {
+        let function = move || component.update_props();
+        let function =
+            wasm_bindgen::closure::Closure::<dyn Fn()>::new(function);
+        let js_function = function.as_ref().unchecked_ref();
+        let observer =
+            web_sys::MutationObserver::new(js_function).unwrap();
+        function.forget();
+
+        let element = get_by_id(root_name);
+
+        let mut options = web_sys::MutationObserverInit::new();
+        options.attributes(true);
+        observer.observe_with_options(&element, &options).unwrap();
+    }
 }
 
-pub fn render_component<C: Component>(mount_point: &str) {
+pub fn render_component<C: Component + 'static>(mount_point: &str) {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let element = document.get_element_by_id(mount_point).unwrap();
@@ -40,6 +60,7 @@ pub fn render_component<C: Component>(mount_point: &str) {
 
     let component = C::create(mount_point.to_owned());
     element.set_inner_html(&component.render_init());
+    C::setup_watcher(component.clone(), mount_point);
     component.setup_events(None);
     component.spawn_sub(None);
     component.update_all(None);
@@ -255,4 +276,16 @@ pub trait EventWrapper {
 
 pub trait Event: UseInEvent {
     const NAME: &'static str;
+}
+
+pub fn emit<E: Event>(root_name: &str, event: &E) {
+    let root_element = get_by_id(root_name);
+    let data = bincode::serialize(&event).unwrap();
+    let data = js_sys::Uint8Array::from(data.as_slice());
+    let event = web_sys::CustomEvent::new_with_event_init_dict(
+        E::NAME,
+        web_sys::CustomEventInit::new().detail(&data),
+    )
+    .unwrap();
+    root_element.dispatch_event(&event).unwrap();
 }

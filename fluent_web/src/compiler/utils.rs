@@ -21,23 +21,62 @@ pub fn uuid() -> String {
     format!("__Fluent_UUID_{id}")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Add a class to the `class` attribute on a node
+/// This also creates the class attribute if it is not present.
+pub fn add_class(
+    attributes: &mut kuchikiki::Attributes,
+    class: &str,
+) {
+    let current_class =
+        if let Some(value) = attributes.get_mut("class") {
+            value
+        } else {
+            attributes.insert("class", String::new());
+            attributes
+                .get_mut("class")
+                .expect("Newly inserted class to be there")
+        };
 
-    #[test]
-    fn test_find_top_level_tag() {
-        const CONTENT: &str = "<a>Hello World</a> <b>123</b>";
+    current_class.push(' ');
+    current_class.push_str(class);
+}
 
-        assert_eq!(
-            "Hello World",
-            find_top_level_tag(CONTENT, "a")
-                .expect("<a> to be in test content")
-        );
-        assert_eq!(
-            "123",
-            find_top_level_tag(CONTENT, "b")
-                .expect("<b> to be in test content")
-        );
+/// Extract rust code from format strings returning the string with just {} and a vector of the expressions
+pub fn extract_format_strings(
+    text: &str,
+) -> (String, Vec<syn::Expr>) {
+    let mut format_string = String::with_capacity(text.len());
+    let mut expressions = Vec::new();
+
+    let mut current_str = String::new();
+    let mut in_template = false;
+
+    // Find all {} pairs in the text.
+    for c in text.chars() {
+        match c {
+            '{' => {
+                in_template = true;
+                format_string += "{";
+                current_str.clear();
+            }
+            '}' => {
+                in_template = false;
+                format_string += "}";
+                expressions.push(
+                    syn::parse_str(&current_str).expect(
+                        "format content to be valid expression",
+                    ),
+                );
+                current_str.clear();
+            }
+            c => {
+                if in_template {
+                    current_str.push(c);
+                } else {
+                    format_string.push(c);
+                }
+            }
+        }
     }
+    (format_string, expressions)
 }

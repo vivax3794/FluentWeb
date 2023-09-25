@@ -22,5 +22,5 @@ pub enum Compiler {
     WrongSyntax(String),
 }
 
-/// A []
+/// A `Result` using the `Compiler` error
 pub type CompilerResult<T> = Result<T, Compiler>;

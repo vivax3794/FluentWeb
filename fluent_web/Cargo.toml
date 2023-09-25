@@ -26,5 +26,6 @@ syn = { version = "2.0.35", default-features = false, features = [
     "printing",
     "proc-macro",
     "full",
+    "clone-impls",
 ] }
 uuid = { version = "1.4.1", features = ["v4"] }

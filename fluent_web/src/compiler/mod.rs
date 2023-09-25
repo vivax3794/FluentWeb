@@ -1,22 +1,25 @@
 //! Compile fluent files
 
+// TODO: CallDefPair
+
 use std::{
-    borrow::BorrowMut,
-    convert::Infallible,
     env::current_dir,
     fs,
     path::{Path, PathBuf},
 };
 
 use html5ever::tendril::TendrilSink;
-use lightningcss::visitor::Visit;
 
 use crate::prelude::*;
 
+mod custom_events;
 mod data_and_props;
+mod style;
 mod utils;
 
-use utils::{find_top_level_tag, uuid};
+use utils::{
+    add_class, extract_format_strings, find_top_level_tag, uuid,
+};
 
 /// Compiles all files in `./src_fluent` into `./src`
 pub fn compile_project() -> CompilerResult<()> {
@@ -125,7 +128,7 @@ fn get_html_body(source_content: &str) -> kuchikiki::NodeRef {
 /// Create the update functions for reactive <spans>
 fn create_reactive_update_function(
     reactive_text: &ReactiveText,
-    data: &data_and_props::DataSectionInfo,
+    data: &data_and_props::Unwraps,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let ReactiveText {
         expressions,
@@ -135,7 +138,7 @@ fn create_reactive_update_function(
 
     let function_name = quote::format_ident!("update_element_{}", id);
 
-    let selector = format!(".{}", id);
+    let selector = format!(".{id}");
     let function_def = quote! {
         fn #function_name(&self, __Fluent_S: Option<String>) {
             #{&data.unpack_ref}
@@ -154,23 +157,6 @@ fn create_reactive_update_function(
     (function_def, call)
 }
 
-/// Add a class to the `class` attribute on a node
-/// This also creates the class attribute if it is not present.
-fn add_class(attributes: &mut kuchikiki::Attributes, class: &str) {
-    let current_class =
-        if let Some(value) = attributes.get_mut("class") {
-            value
-        } else {
-            attributes.insert("class", String::new());
-            attributes
-                .get_mut("class")
-                .expect("Newly inserted class to be there")
-        };
-
-    current_class.push(' ');
-    current_class.push_str(class);
-}
-
 /// Data used to create sub components
 struct SubComponentData {
     id: String,
@@ -182,6 +168,8 @@ fn find_sub_components_and_replace_with_div(
     node: kuchikiki::NodeRef,
 ) -> Vec<SubComponentData> {
     use kuchikiki::NodeData;
+    use markup5ever::namespace_url;
+
     match node.data() {
         NodeData::Element(data)
             if &data.name.local == "component" =>
@@ -194,7 +182,6 @@ fn find_sub_components_and_replace_with_div(
                 .expect("Component src to be valid rust path");
             let id = uuid();
 
-            use markup5ever::namespace_url;
             let mut attributes = attributes.clone();
 
             attributes.remove("src");
@@ -224,7 +211,6 @@ fn find_sub_components_and_replace_with_div(
 }
 
 /// Create the calls used for creating sub components
-/// returns (function_def, call)
 fn create_spawn_and_spawn_call_for_subcomponent(
     data: &SubComponentData,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
@@ -232,7 +218,7 @@ fn create_spawn_and_spawn_call_for_subcomponent(
 
     let function_name = quote::format_ident!("spawn_component_{id}");
 
-    let selector = format!(".{}.__Fluent_Needs_Init", id);
+    let selector = format!(".{id}.__Fluent_Needs_Init");
     let function_def = quote!(
         fn #function_name(&self, __Fluent_S: Option<String>) {
             let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
@@ -309,43 +295,6 @@ fn find_reactive_nodes_and_replace_with_span(
         }
         _ => vec![],
     }
-}
-
-fn extract_format_strings(text: &str) -> (String, Vec<syn::Expr>) {
-    let mut format_string = String::with_capacity(text.len());
-    let mut expressions = Vec::new();
-
-    let mut current_str = String::new();
-    let mut in_template = false;
-
-    // Find all {} pairs in the text.
-    for c in text.chars() {
-        match c {
-            '{' => {
-                in_template = true;
-                format_string += "{";
-                current_str.clear();
-            }
-            '}' => {
-                in_template = false;
-                format_string += "}";
-                expressions.push(
-                    syn::parse_str(&current_str).expect(
-                        "format content to be valid expression",
-                    ),
-                );
-                current_str.clear()
-            }
-            c => {
-                if in_template {
-                    current_str.push(c);
-                } else {
-                    format_string.push(c);
-                }
-            }
-        }
-    }
-    (format_string, expressions)
 }
 
 /// Represents the info for a event callback
@@ -451,7 +400,7 @@ fn find_event_listeners_and_set_class(
 /// Create the event listeners
 fn compile_event_listener(
     event: &EventListener,
-    data: &data_and_props::DataSectionInfo,
+    data: &data_and_props::Unwraps,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let EventListener {
         id,
@@ -652,7 +601,7 @@ fn find_conditional_attributes_and_set_id(
 /// Compile a conditional attribute
 fn compile_conditional_stmt(
     attribute: &ConditionalAttribute,
-    data: &data_and_props::DataSectionInfo,
+    data: &data_and_props::Unwraps,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let ConditionalAttribute {
         id,
@@ -744,60 +693,6 @@ fn parse_generics(source_content: &str) -> Generics {
     }
 }
 
-fn parse_events(source_content: &str) -> Vec<syn::ItemStruct> {
-    let event_content =
-        find_top_level_tag(source_content, "events").unwrap_or("");
-    let block: syn::File = syn::parse_str(event_content)
-        .expect("<events> to be valid top level");
-
-    block
-        .items
-        .into_iter()
-        .map(|item| match item {
-            syn::Item::Struct(struct_) => struct_,
-            _ => panic!("<events> to only contain structs"),
-        })
-        .collect()
-}
-
-fn compile_events(
-    events: Vec<syn::ItemStruct>,
-    generics: &Generics,
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let (events, wrappers): (Vec<_>, Vec<_>) = itertools::multiunzip(events
-        .into_iter()
-        .map(|item| {
-            let (used_generics, _, _) = item.generics.split_for_impl();
-            let ident = &item.ident;
-            let ident_string = ident.to_string();
-            let main = quote!(
-                #[derive(
-                    ::fluent_web_client::internal::serde::Serialize,
-                    ::fluent_web_client::internal::serde::Deserialize
-                )]
-                #[serde(crate="::fluent_web_client::internal::serde")]
-                #item
-                impl #{&generics.impl_generics} ::fluent_web_client::internal::Event for #ident #used_generics {
-                    const NAME: &'static str = #ident_string;
-                }
-            );
-            let wrapper = quote!(
-                #[derive(
-                    ::fluent_web_client::internal::serde::Serialize,
-                    ::fluent_web_client::internal::serde::Deserialize
-                )]
-                #[serde(crate="::fluent_web_client::internal::serde")]
-                pub struct #ident #{&generics.ty_generics} (pub super::#ident #used_generics, pub #{&generics.phantom});
-                impl #{&generics.ty_generics} ::fluent_web_client::internal::EventWrapper for #ident #{&generics.ty_generics} #{&generics.where_clauses} {
-                    type Real = super::#ident #used_generics;
-                }
-            );
-            (main, wrapper)
-        }));
-
-    (quote!(#(#events)*), quote!(#(#wrappers)*))
-}
-
 struct ReactiveAttributeInfo {
     target_element: String,
     target_attribute: String,
@@ -879,7 +774,7 @@ fn find_and_transform_reactive_attributes(
 
 fn compile_reactive_attribute(
     attributes: ReactiveAttributeInfo,
-    data: &data_and_props::DataSectionInfo,
+    data: &data_and_props::Unwraps,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let ReactiveAttributeInfo {
         target_element,
@@ -921,212 +816,6 @@ fn compile_reactive_attribute(
     (function_def, call)
 }
 
-struct ReactiveCssVar {
-    id: String,
-    var: String,
-    format_string: String,
-    expressions: Vec<syn::Expr>,
-}
-
-fn find_and_remove_css_vars(
-    node: kuchikiki::NodeRef,
-) -> Vec<ReactiveCssVar> {
-    use kuchikiki::NodeData;
-    match node.data() {
-        NodeData::Element(data) => {
-            let mut attributes = data.attributes.borrow_mut();
-            let vars = attributes
-                .map
-                .iter()
-                .filter_map(|(name, value)| {
-                    if name.local.starts_with("--") {
-                        Some((
-                            name.local.to_string(),
-                            value.value.clone(),
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            let mut result = if vars.is_empty() {
-                vec![]
-            } else {
-                let id = uuid();
-                add_class(&mut attributes, &id);
-
-                vars.into_iter()
-                    .map(|(name, value)| {
-                        attributes.remove(name.clone());
-
-                        let (text, expressions) =
-                            extract_format_strings(&value);
-                        ReactiveCssVar {
-                            id: id.clone(),
-                            var: name.clone(),
-                            format_string: text,
-                            expressions,
-                        }
-                    })
-                    .collect()
-            };
-
-            result.extend(
-                node.children().flat_map(find_and_remove_css_vars),
-            );
-
-            result
-        }
-        _ => vec![],
-    }
-}
-
-fn compile_css_vars(
-    var: ReactiveCssVar,
-    data: &data_and_props::DataSectionInfo,
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let ReactiveCssVar {
-        id,
-        var,
-        format_string,
-        expressions,
-    } = var;
-
-    let function_name = quote::format_ident!("update_css_{}", uuid());
-    let selector = format!(".{}", id);
-
-    let def = quote!(
-        fn #function_name(&self, __Fluent_S: Option<String>) {
-            #{&data.unpack_ref}
-
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
-            for __Fluent_Element in __Fluent_Elements.into_iter() {
-                let __Fluent_Value = ::std::format!(#format_string, #(#expressions),*);
-                use fluent_web_client::internal::wasm_bindgen::JsCast;
-                let __Fluent_Element = __Fluent_Element.dyn_into::<::fluent_web_client::internal::web_sys::HtmlElement>().unwrap();
-                __Fluent_Element.style().set_property(#var, &__Fluent_Value).unwrap();
-            }
-
-            self.detect_reads(Component::#function_name);
-        }
-    );
-    let call = quote!(self.#function_name(root.clone()););
-    (def, call)
-}
-
-struct CssTransformer {
-    replacement_string: String,
-}
-
-impl CssTransformer {
-    fn new() -> Self {
-        let uuid = uuid();
-        CssTransformer {
-            replacement_string: uuid,
-        }
-    }
-}
-
-impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
-    type Error = Infallible;
-
-    fn visit_types(&self) -> lightningcss::visitor::VisitTypes {
-        lightningcss::visit_types!(SELECTORS)
-    }
-
-    fn visit_selector(
-        &mut self,
-        selector: &mut lightningcss::selector::Selector<'i>,
-    ) -> Result<(), Self::Error> {
-        let mut segements = Vec::new();
-        let mut components_iterator = selector.iter();
-
-        let mut combiner = None;
-        loop {
-            segements.push((
-                components_iterator
-                    .borrow_mut()
-                    .map(Clone::clone)
-                    .collect::<Vec<_>>(),
-                combiner,
-            ));
-            combiner = components_iterator.next_sequence();
-
-            if combiner.is_none() {
-                break;
-            }
-        }
-
-        let where_clause =
-            lightningcss::selector::Component::Where(Box::new([
-                lightningcss::selector::Selector::from(vec![
-                    lightningcss::selector::Component::ID(
-                        self.replacement_string.clone().into(),
-                    ),
-                    lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
-                    lightningcss::selector::Component::ExplicitUniversalType,
-                    lightningcss::selector::Component::Negation(Box::new([
-                        lightningcss::selector::Selector::from(vec![
-                            lightningcss::selector::Component::ID(
-                                self.replacement_string.clone().into(),
-                            ),
-                            lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
-                            lightningcss::selector::Component::Class(
-                                "__Fluent_Component".into(),
-                            ),
-                            lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
-                            lightningcss::selector::Component::ExplicitUniversalType,
-                            ]),
-                        ])
-                    )
-                ]),
-            ]));
-
-        segements[0].0.push(where_clause.clone());
-
-        if segements.len() > 1 {
-            segements
-                .last_mut()
-                .expect("Vector containg >1 elements not to be empty")
-                .0
-                .push(where_clause);
-        }
-
-        let segements = segements
-            .into_iter()
-            .flat_map(|(mut components, combinator)| {
-                if let Some(comb) = combinator {
-                    components.insert(
-                        0,
-                        lightningcss::selector::Component::Combinator(
-                            comb,
-                        ),
-                    );
-                    components
-                } else {
-                    components
-                }
-            })
-            .collect::<Vec<_>>();
-        let new_selector: lightningcss::selector::Selector =
-            segements.into();
-        *selector = new_selector;
-
-        Ok(())
-    }
-}
-
-/// Transforms the css by adding the returned string as a placeholder for the rootname
-/// This scopes the css to the specific component using the same selector as the fluent_web_client
-fn transform_css(
-    css: &mut lightningcss::stylesheet::StyleSheet,
-) -> String {
-    let mut trans = CssTransformer::new();
-    css.visit(&mut trans).unwrap();
-    trans.replacement_string
-}
-
 /// Compiler a fluent file to a rust file, this is the main block of code
 fn compile_fluent_file(
     source: PathBuf,
@@ -1142,22 +831,17 @@ fn compile_fluent_file(
                 .unwrap_or(""),
             true,
         )?;
-
     let mut data_statements =
         data_and_props::parse_data_and_props_segement(
             find_top_level_tag(&source_content, "data").unwrap_or(""),
             false,
         )?;
-
     data_statements.extend(prop_statements.clone());
-    let data = data_and_props::compile_data_section(&data_statements);
+    let data = data_and_props::compile_unwraps(&data_statements);
 
-    let (events, wrappers) =
-        compile_events(parse_events(&source_content), &generics);
-
-    let define_content =
-        find_top_level_tag(&source_content, "define").unwrap_or("");
-    let define_parsed: syn::File = syn::parse_str(define_content)?;
+    let define_parsed: syn::File = syn::parse_str(
+        find_top_level_tag(&source_content, "define").unwrap_or(""),
+    )?;
 
     let body_html = get_html_body(&source_content);
 
@@ -1204,9 +888,9 @@ fn compile_fluent_file(
         .unzip();
 
     let (css_defs, css_calls): (Vec<_>, Vec<_>) =
-        find_and_remove_css_vars(body_html.clone())
+        style::find_and_remove_css_vars(body_html.clone())
             .into_iter()
-            .map(|info| compile_css_vars(info, &data))
+            .map(|info| style::compile_css_vars(info, &data))
             .unzip();
 
     let mut html_content = Vec::new();
@@ -1219,43 +903,9 @@ fn compile_fluent_file(
     let mut html_content = String::from_utf8(html_content)
         .expect("<template> to be valid utf8");
 
-    let css_raw =
-        find_top_level_tag(&source_content, "style").unwrap_or("");
-    let mut css = lightningcss::stylesheet::StyleSheet::parse(
-        css_raw,
-        lightningcss::stylesheet::ParserOptions::default(),
-    )
-    .expect("<style> tag to be valid css");
-
-    let replace_string = transform_css(&mut css);
-
-    let css_content = css
-        .to_css(lightningcss::stylesheet::PrinterOptions {
-            minify: true,
-            ..Default::default()
-        })
-        .expect("To be able to minify css")
-        .code;
-
-    let css_content = css_content
-        .replace('{', "{{")
-        .replace('}', "}}")
-        .replace(&replace_string, "{root}");
-
-    html_content += &format!("<style>{css_content}</style>");
-
-    let read_updates = data.targets.iter().map(|target| {
-        quote!(
-            if #target.was_read() {__Fluent_Updates.#target.insert(f);}
-            #target.clear();
-        )
-    }).collect::<Vec<_>>();
-    let write_updates = data.targets.iter().map(|target| {
-        quote!(
-            if #target.was_written() {__Fluent_Functions.extend(__Fluent_Updates.#target.iter());}
-            #target.clear();
-        )
-    }).collect::<Vec<_>>();
+    html_content += &style::transform_css(
+        find_top_level_tag(&source_content, "style").unwrap_or(""),
+    );
 
     let component_source = quote!(
         #![allow(warnings)]
@@ -1276,11 +926,7 @@ fn compile_fluent_file(
             updates: ::std::rc::Rc<::std::cell::RefCell<__Fluid_Reactive_Functions #{&generics.ty_generics}>>,
         }
 
-        #events
-
-        pub mod __Fluent_Events {
-            #wrappers
-        }
+        #{custom_events::compile_events(&source_content, &generics)?}
 
         impl #{&generics.impl_generics} Component #{&generics.ty_generics} #{&generics.where_clauses} {
             #(#subcomponent_defs)*
@@ -1290,41 +936,11 @@ fn compile_fluent_file(
             #(#css_defs)*
             #(#event_set_defs)*
 
-            fn detect_reads(&self, f: fn(&Component #{&generics.ty_generics}, Option<String>)) {
-                let mut __Fluent_Updates = self.updates.borrow_mut();
-                #{&data.unpack_change_detector}
-                #(#read_updates)*
-            }
+            #{data_and_props::compile_detect_reads(&data_statements, &generics, &data)}
+            #{data_and_props::compile_update_changed_values(&data_statements, &generics, &data)}
 
-            fn update_changed_values(&self) {
-                let mut __Fluent_Updates = self.updates.borrow_mut();
-                #{&data.unpack_change_detector}
-
-                let mut __Fluent_Functions: ::std::collections::HashSet<fn(&Component #{&generics.ty_generics}, Option<String>)> = ::std::collections::HashSet::new();
-                #(#write_updates)*
-
-                ::std::mem::drop(__Fluent_Updates);
-
-                for func in __Fluent_Functions.into_iter() {
-                    func(self, None);
-                }
-            }
-
-            #{data_and_props::compile_setup_watcher()}
-            #{data_and_props::compile_update_props(&prop_statements)}
-
-            // It should be fine with mutliple borrows as parent components will be the ones borrowing.
-            fn emit<E: ::fluent_web_client::internal::Event>(&self, event: E) {
-                use ::fluent_web_client::internal::web_sys;
-
-                let root_element = ::fluent_web_client::internal::get_by_id(&self.root_name);
-                let data = ::fluent_web_client::internal::bincode::serialize(&event).unwrap();
-                let data = ::fluent_web_client::internal::js_sys::Uint8Array::from(data.as_slice());
-                let event = web_sys::CustomEvent::new_with_event_init_dict(
-                    E::NAME,
-                    &web_sys::CustomEventInit::new().detail(&data)
-                ).unwrap();
-                root_element.dispatch_event(&event).unwrap();
+            fn emit<E: ::fluent_web_client::internal::Event>(&self, event: &E) {
+                ::fluent_web_client::internal::emit(&self.root_name, event);
             }
         }
 
@@ -1334,24 +950,15 @@ fn compile_fluent_file(
                 ::std::format!(#html_content)
             }
 
-            fn create(root_id: String) -> Self {
-                Self {
-                    root_name: root_id,
-                    data: __Fluid_Data {
-                        #(for create in data.create) {#create}
-                        _p: std::marker::PhantomData,
-                    },
-                    updates: ::std::rc::Rc::new(::std::cell::RefCell::new(__Fluid_Reactive_Functions::default())),
-                }
-            }
+            #{data_and_props::compile_create(&data_statements)}
+            #{data_and_props::compile_update_props(&prop_statements)}
 
             fn setup_events(&self, root: Option<String>) {
                 #(#event_set_calls)*
-                self.update_props();
-                self.setup_watcher();
             }
 
             fn update_all(&self, root: Option<String>) {
+                self.update_props();
                 #(#reactive_update_calls)*
                 #(#conditional_calls)*
                 #(#reactive_attribute_calls)*
