@@ -5,7 +5,9 @@ use std::convert::Infallible;
 
 use lightningcss::visitor::Visit;
 
-use super::utils::{add_class, extract_format_strings, uuid};
+use super::utils::{extract_format_strings, uuid};
+use super::utils::{modify_html, ModifiedHtmlInfo};
+use super::DefCallPair;
 use crate::prelude::*;
 
 /// This transforms the css with `__Fluent_UUID_XXX` where the root id should go.
@@ -81,12 +83,8 @@ impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
 
         segements[0].0.push(where_clause.clone());
 
-        if segements.len() > 1 {
-            segements
-                .last_mut()
-                .expect("Vector containg >1 elements not to be empty")
-                .0
-                .push(where_clause);
+        if let Some(last_value) = segements.last_mut() {
+            last_value.0.push(where_clause);
         }
 
         let segements = segements
@@ -124,12 +122,12 @@ fn transform_stylesheet(
 }
 
 /// Transform the css into scoped css with {root} as a placeholder for the root id
-pub fn transform_css(css_raw: &str) -> String {
+pub fn transform_css(css_raw: &str) -> CompilerResult<String> {
     let mut css_parsed = lightningcss::stylesheet::StyleSheet::parse(
         css_raw,
         lightningcss::stylesheet::ParserOptions::default(),
     )
-    .expect("<style> tag to be valid css");
+    .map_err(|err| Compiler::CssPraseError(format!("{err}")))?;
 
     let replace_string = transform_stylesheet(&mut css_parsed);
 
@@ -137,8 +135,7 @@ pub fn transform_css(css_raw: &str) -> String {
         .to_css(lightningcss::stylesheet::PrinterOptions {
             minify: true,
             ..Default::default()
-        })
-        .expect("To be able to minify css")
+        })?
         .code;
 
     let css_content = css_content
@@ -146,84 +143,19 @@ pub fn transform_css(css_raw: &str) -> String {
         .replace('}', "}}")
         .replace(&replace_string, "{root}");
 
-    format!("<style>{css_content}</style>")
-}
-/// Data for a css var
-pub struct ReactiveCssVar {
-    /// Element Id
-    id: String,
-    /// Css variable
-    var: String,
-    /// The format string (with just {})
-    format_string: String,
-    /// Rust expressions to fill format string
-    expressions: Vec<syn::Expr>,
-}
-
-/// Find css vars in the html and remove them, and then return the info
-#[allow(clippy::needless_pass_by_value)]
-pub fn find_and_remove_css_vars(
-    node: kuchikiki::NodeRef,
-) -> Vec<ReactiveCssVar> {
-    use kuchikiki::NodeData;
-    match node.data() {
-        NodeData::Element(data) => {
-            let mut attributes = data.attributes.borrow_mut();
-            let vars = attributes
-                .map
-                .iter()
-                .filter(|&(name, _)| name.local.starts_with("--"))
-                .map(|(name, value)| {
-                    (name.local.to_string(), value.value.clone())
-                })
-                .collect::<Vec<_>>();
-
-            let mut result = if vars.is_empty() {
-                vec![]
-            } else {
-                let id = uuid();
-                add_class(&mut attributes, &id);
-
-                vars.into_iter()
-                    .map(|(name, value)| {
-                        attributes.remove(name.clone());
-
-                        let (text, expressions) =
-                            extract_format_strings(&value);
-                        ReactiveCssVar {
-                            id: id.clone(),
-                            var: name.clone(),
-                            format_string: text,
-                            expressions,
-                        }
-                    })
-                    .collect()
-            };
-
-            result.extend(
-                node.children().flat_map(find_and_remove_css_vars),
-            );
-
-            result
-        }
-        _ => vec![],
-    }
+    Ok(format!("<style>{css_content}</style>"))
 }
 
 /// Compile css vars into a update function, and a call to that update function
-pub fn compile_css_vars(
-    var: ReactiveCssVar,
+fn compile_css_vars(
+    var: &ModifiedHtmlInfo,
     data: &super::data_and_props::Unwraps,
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let ReactiveCssVar {
-        id,
-        var,
-        format_string,
-        expressions,
-    } = var;
+) -> CompilerResult<DefCallPair> {
+    let (format_string, expressions) =
+        extract_format_strings(&var.value)?;
 
     let function_name = quote::format_ident!("update_css_{}", uuid());
-    let selector = format!(".{id}");
+    let selector = format!(".{}", var.id);
 
     let def = quote!(
         fn #function_name(&self, __Fluent_S: Option<String>) {
@@ -234,12 +166,24 @@ pub fn compile_css_vars(
                 let __Fluent_Value = ::std::format!(#format_string, #(#expressions),*);
                 use fluent_web_client::internal::wasm_bindgen::JsCast;
                 let __Fluent_Element = __Fluent_Element.dyn_into::<::fluent_web_client::internal::web_sys::HtmlElement>().unwrap();
-                __Fluent_Element.style().set_property(#var, &__Fluent_Value).unwrap();
+                __Fluent_Element.style().set_property(#{format!("--{}", var.attribute)}, &__Fluent_Value).unwrap();
             }
 
             self.detect_reads(Component::#function_name);
         }
     );
     let call = quote!(self.#function_name(root.clone()););
-    (def, call)
+    Ok(DefCallPair { def, call })
+}
+
+/// Compile css vars
+pub fn compile(
+    html: kuchikiki::NodeRef,
+    data: &super::data_and_props::Unwraps,
+) -> CompilerResult<Vec<DefCallPair>> {
+    let nodes = modify_html(html, "--");
+    nodes
+        .into_iter()
+        .map(|node| compile_css_vars(&node, data))
+        .collect()
 }

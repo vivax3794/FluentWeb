@@ -1,7 +1,7 @@
 <template>
     <button id="TARGET" :click="|_, _| *value += 1">{value}</button>
 
-    <component src="Sub" ;click="|event, _| *other_value = event.0"></component>
+    <component src="Sub" ;click="|event| *other_value = event.0"></component>
     <span id ="OTHER_TARGET">{other_value}</span>
 
     <input :click="|_, element| dbg!(element.value())"></button>

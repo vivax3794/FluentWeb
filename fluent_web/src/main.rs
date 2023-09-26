@@ -1,6 +1,5 @@
 #![feature(box_patterns)]
 #![warn(
-    clippy::cargo,
     clippy::pedantic,
     clippy::clone_on_ref_ptr,
     clippy::create_dir,
@@ -20,7 +19,8 @@
     clippy::try_err,
     clippy::unneeded_field_pattern,
     clippy::use_debug,
-    clippy::verbose_file_reads
+    clippy::verbose_file_reads,
+    clippy::expect_used
 )]
 #![deny(
     clippy::unwrap_used,

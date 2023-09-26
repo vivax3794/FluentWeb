@@ -20,10 +20,8 @@ pub fn parse_data_and_props_segement(
     data_section: &str,
     is_prop: bool,
 ) -> CompilerResult<Vec<DataStatement>> {
-    let data_block_parsed: syn::Block = syn::parse_str(&format!(
-        "{{{data_section}}}"
-    ))
-    .expect("Valid statements in block should still be valid");
+    let data_block_parsed: syn::Block =
+        syn::parse_str(&format!("{{{data_section}}}"))?;
 
     data_block_parsed
         .stmts

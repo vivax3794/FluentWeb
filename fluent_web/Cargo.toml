@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "SFC frontend web framework for rust!"
 license = "MIT"
+repository = "https://github.com/vivax3794/FluentWeb"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 thiserror = "1.0.48"
 html5ever = "0.26.0"
-itertools = "0.11.0"
 kuchikiki = "0.8.2"
 lightningcss = { version = "1.0.0-alpha.46", default-features = false, features = [
     "visitor",

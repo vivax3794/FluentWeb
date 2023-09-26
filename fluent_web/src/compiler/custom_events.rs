@@ -1,25 +1,23 @@
 //! Define custom events in <events>
 
 use super::utils::find_top_level_tag;
-use crate::error;
 
 use crate::prelude::*;
 
 /// Parse custom events
 fn parse_events(
     source_content: &str,
-) -> error::CompilerResult<Vec<syn::ItemStruct>> {
+) -> CompilerResult<Vec<syn::ItemStruct>> {
     let event_content =
         find_top_level_tag(source_content, "events").unwrap_or("");
-    let block: syn::File = syn::parse_str(event_content)
-        .expect("<events> to be valid top level");
+    let block: syn::File = syn::parse_str(event_content)?;
 
     block
         .items
         .into_iter()
         .map(|item| match item {
             syn::Item::Struct(struct_) => Ok(struct_),
-            _ => Err(error::Compiler::WrongSyntax(
+            _ => Err(Compiler::WrongSyntax(
                 "<events> to only contain structs".into(),
             )),
         })
@@ -67,7 +65,7 @@ fn compile_events_internal(
 pub fn compile_events(
     source_content: &str,
     generics: &super::Generics,
-) -> error::CompilerResult<proc_macro2::TokenStream> {
+) -> CompilerResult<proc_macro2::TokenStream> {
     Ok(compile_events_internal(
         &parse_events(source_content)?,
         generics,

@@ -7,11 +7,11 @@
     </div>
 
     <div id="B1">
-        <component src="super::Sub2<u8>" ;click="|event, _| *b1 = event.0"></component>
+        <component src="super::Sub2<u8>" ;click="|event| *b1 = event.0"></component>
         <p>{b1}</p>
     </div>
     <div id="B2">
-        <component src="super::Sub2<bool>" ;click="|event, _| *b2 = event.0"></component>
+        <component src="super::Sub2<bool>" ;click="|event| *b2 = event.0"></component>
         <p>{b2}</p>
     </div>
     <div id="C1">

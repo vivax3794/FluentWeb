@@ -22,8 +22,7 @@ pub trait Component: Clone {
     fn render_init(&self) -> String;
     fn create(root_id: String) -> Self;
 
-    fn setup_events(&self, root: Option<String>);
-    fn spawn_sub(&self, root: Option<String>);
+    fn setup_onetime(&self, root: Option<String>);
     fn update_all(&self, root: Option<String>);
     fn update_props(&self);
 
@@ -61,8 +60,7 @@ pub fn render_component<C: Component + 'static>(mount_point: &str) {
     let component = C::create(mount_point.to_owned());
     element.set_inner_html(&component.render_init());
     C::setup_watcher(component.clone(), mount_point);
-    component.setup_events(None);
-    component.spawn_sub(None);
+    component.setup_onetime(None);
     component.update_all(None);
 }
 
