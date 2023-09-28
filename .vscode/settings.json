@@ -1,6 +1,7 @@
 {
-    "cSpell.words": [
-        "kuchiki"
-    ],
-    "rust-analyzer.showUnlinkedFileNotification": false
+    "rust-analyzer.showUnlinkedFileNotification": false,
+    "lldb.library": "/nix/store/yxsjvismqgq7acc70yj3nvkhg1qbrpi0-lldb-14.0.6-lib/lib/liblldb.so",
+    "lldb.adapterEnv": {
+        "LLDB_DEBUGSERVER_PATH": "/run/current-system/sw/bin/lldb-server"
+    }
 }

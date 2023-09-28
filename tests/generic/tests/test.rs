@@ -44,7 +44,6 @@ async fn test_default() -> WebDriverResult<()> {
     Ok(())
 }
 
-
 #[tokio::test]
 async fn test_props() -> WebDriverResult<()> {
     let driver = create_driver().await;

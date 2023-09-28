@@ -20,8 +20,7 @@ pub fn parse_data_and_props_segement(
     data_section: &str,
     is_prop: bool,
 ) -> CompilerResult<Vec<DataStatement>> {
-    let data_block_parsed: syn::Block =
-        syn::parse_str(&format!("{{{data_section}}}"))?;
+    let data_block_parsed: syn::Block = syn::parse_str(&format!("{{{data_section}}}"))?;
 
     data_block_parsed
         .stmts
@@ -77,7 +76,7 @@ pub struct Unwraps {
 /// Create all the code gen for the data fields
 pub fn compile_unwraps(data_statements: &[DataStatement]) -> Unwraps {
     let unpack_change_detector = quote!(
-        let __Fluid_Data { #(#{&#data_statements.target},)* .. } = self.data.clone();
+        let __Fluid_Data { #(ref mut #{&#data_statements.target},)* .. } = &mut self.data;
     );
 
     let unpack_ref = quote!(
@@ -116,11 +115,9 @@ pub fn compile_data_struct(
     generics: &super::Generics,
 ) -> proc_macro2::TokenStream {
     quote!(
-        #[derive(::fluent_web_client::internal::Derivative)]
-        #[derivative(Clone(bound = ""))]
         struct __Fluid_Data #{&generics.generic_def} {
             #(for field in data) {
-                #{&field.target}: ::fluent_web_client::internal::ChangeDetector<#{&field.type_}>,
+                #{&field.target}: ::fluent_web_runtime::internal::ChangeDetector<#{&field.type_}>,
             }
             _p: #{&generics.phantom}
         }
@@ -128,20 +125,18 @@ pub fn compile_data_struct(
 }
 
 /// Compile create function for component
-pub fn compile_create(
-    data: &[DataStatement],
-) -> proc_macro2::TokenStream {
+pub fn compile_create(data: &[DataStatement]) -> proc_macro2::TokenStream {
     quote!(
-        fn create(root_id: String) -> Self {
+        fn create(root_id: ::std::boxed::Box<str>) -> Self {
             Self {
                 root_name: root_id,
                 data: __Fluid_Data {
                     #(for field in data) {
-                        #{&field.target}: ::fluent_web_client::internal::ChangeDetector::new(#{&field.init_value}),
+                        #{&field.target}: ::fluent_web_runtime::internal::ChangeDetector::new(#{&field.init_value}),
                     }
                     _p: std::marker::PhantomData,
                 },
-                updates: ::std::rc::Rc::new(::std::cell::RefCell::new(__Fluid_Reactive_Functions::default())),
+                updates: __Fluid_Reactive_Functions::default(),
             }
         }
     )
@@ -153,11 +148,11 @@ pub fn compile_reactive_function_struct(
     generics: &super::Generics,
 ) -> proc_macro2::TokenStream {
     quote!(
-        #[derive(::fluent_web_client::internal::Derivative)]
+        #[derive(::fluent_web_runtime::internal::Derivative)]
         #[derivative(Default(bound = ""))]
         struct __Fluid_Reactive_Functions #{&generics.impl_generics} #{&generics.where_clauses} {
            #(for field in data) {
-                #{&field.target}: ::std::collections::HashSet<fn(&Component #{&generics.ty_generics}, Option<String>)>,
+                #{&field.target}: ::std::collections::HashSet<fn(&mut Component #{&generics.ty_generics}, Option<&str>)>,
            }
             _p: #{&generics.phantom}
         }
@@ -165,19 +160,17 @@ pub fn compile_reactive_function_struct(
 }
 
 /// Compile `update_props` function which will read all the prop values
-pub fn compile_update_props(
-    props: &[DataStatement],
-) -> proc_macro2::TokenStream {
+pub fn compile_update_props(props: &[DataStatement]) -> proc_macro2::TokenStream {
     quote!(
-        fn update_props(&self) {
-            let element = ::fluent_web_client::internal::get_by_id(
+        fn update_props(&mut self) {
+            let element = ::fluent_web_runtime::internal::get_by_id(
                 &self.root_name,
             );
             #(for prop in props) {
                 if let Some(value) = element.get_attribute(#{prop.target.to_string()}) {
-                    use ::fluent_web_client::internal::base64::engine::Engine;
-                    let decoded = ::fluent_web_client::internal::base64::engine::general_purpose::STANDARD_NO_PAD.decode(value).unwrap();
-                    let deserialized = ::fluent_web_client::internal::bincode::deserialize(&decoded).unwrap();
+                    use ::fluent_web_runtime::internal::base64::engine::Engine;
+                    let decoded = ::fluent_web_runtime::internal::base64::engine::general_purpose::STANDARD_NO_PAD.decode(value).unwrap();
+                    let deserialized = ::fluent_web_runtime::internal::bincode::deserialize(&decoded).unwrap();
                     * self.data.#{&prop.target}.borrow_mut() = deserialized;
                 }
             }
@@ -193,12 +186,11 @@ pub fn compile_detect_reads(
     unwraps: &Unwraps,
 ) -> proc_macro2::TokenStream {
     quote!(
-        fn detect_reads(&self, f: fn(&Component #{&generics.ty_generics}, Option<String>)) {
-            let mut __Fluent_Updates = self.updates.borrow_mut();
+        fn detect_reads(&mut self, f: fn(&mut Component #{&generics.ty_generics}, Option<&str>)) {
             #{&unwraps.unpack_change_detector}
             #(for field in data) {
                 if #{&field.target}.was_read() {
-                    __Fluent_Updates.#{&field.target}.insert(f);
+                    self.updates.#{&field.target}.insert(f);
                     #{&field.target}.clear();
                 }
             }
@@ -212,26 +204,17 @@ pub fn compile_update_changed_values(
     generics: &super::Generics,
     unwraps: &Unwraps,
 ) -> proc_macro2::TokenStream {
-    // let write_updates = data.targets.iter().map(|target| {
-    //     quote!(
-    //         if #target.was_written() {__Fluent_Functions.extend(__Fluent_Updates.#target.iter());}
-    //         #target.clear();
-    //     )
-    // }).collect::<Vec<_>>();
-
     quote!(
-        fn update_changed_values(&self) {
-            let mut __Fluent_Updates = self.updates.borrow_mut();
+        fn update_changed_values(&mut self) {
             #{&unwraps.unpack_change_detector}
 
-            let mut __Fluent_Functions: ::std::collections::HashSet<fn(&Component #{&generics.ty_generics}, Option<String>)> = ::std::collections::HashSet::new();
+            let mut __Fluent_Functions: ::std::collections::HashSet<fn(&mut Component #{&generics.ty_generics}, Option<&str>)> = ::std::collections::HashSet::new();
 
             #(for field in data) {
-                if #{&field.target}.was_written() {__Fluent_Functions.extend(__Fluent_Updates.#{&field.target}.iter());}
+                if #{&field.target}.was_written() {__Fluent_Functions.extend(self.updates.#{&field.target}.iter());}
                 #{&field.target}.clear();
             }
 
-            ::std::mem::drop(__Fluent_Updates);
             for func in __Fluent_Functions.into_iter() {
                 func(self, None);
             }

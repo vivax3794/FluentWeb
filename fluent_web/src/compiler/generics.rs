@@ -19,8 +19,7 @@ pub struct Generics {
 
 /// Parse `<generics>`
 pub fn parse(source_content: &str) -> CompilerResult<Generics> {
-    let generic_content =
-        find_top_level_tag(source_content, "generic");
+    let generic_content = find_top_level_tag(source_content, "generic");
 
     match generic_content {
         None => Ok(Generics {
@@ -31,30 +30,22 @@ pub fn parse(source_content: &str) -> CompilerResult<Generics> {
             phantom: quote!(::std::marker::PhantomData<()>),
         }),
         Some(generic_content) => {
-            let fake_item: syn::ItemStruct = syn::parse_str(
-                &format!("struct Fake{generic_content};"),
-            )?;
+            let fake_item: syn::ItemStruct =
+                syn::parse_str(&format!("struct Fake{generic_content};"))?;
 
             let generics = fake_item.generics;
 
-            let (impl_generic, ty_generics, where_clauses) =
-                generics.split_for_impl();
+            let (impl_generic, ty_generics, where_clauses) = generics.split_for_impl();
 
             let phantom_args = generics
                 .params
                 .iter()
                 .map(|param| match param {
-                    syn::GenericParam::Lifetime(
-                        syn::LifetimeParam { lifetime, .. },
-                    ) => quote!(#lifetime),
-                    syn::GenericParam::Type(syn::TypeParam {
-                        ident,
-                        ..
-                    })
-                    | syn::GenericParam::Const(syn::ConstParam {
-                        ident,
-                        ..
-                    }) => quote!(#ident),
+                    syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => {
+                        quote!(#lifetime)
+                    }
+                    syn::GenericParam::Type(syn::TypeParam { ident, .. })
+                    | syn::GenericParam::Const(syn::ConstParam { ident, .. }) => quote!(#ident),
                 })
                 .collect::<Vec<_>>();
 

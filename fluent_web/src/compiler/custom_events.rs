@@ -1,15 +1,11 @@
 //! Define custom events in <events>
 
 use super::utils::find_top_level_tag;
-
 use crate::prelude::*;
 
 /// Parse custom events
-fn parse_events(
-    source_content: &str,
-) -> CompilerResult<Vec<syn::ItemStruct>> {
-    let event_content =
-        find_top_level_tag(source_content, "events").unwrap_or("");
+fn parse_events(source_content: &str) -> CompilerResult<Vec<syn::ItemStruct>> {
+    let event_content = find_top_level_tag(source_content, "events").unwrap_or("");
     let block: syn::File = syn::parse_str(event_content)?;
 
     block
@@ -33,12 +29,12 @@ fn compile_events_internal(
         #(for event in events) {
             #(let (used_generics, _, _) = event.generics.split_for_impl()) {
                 #[derive(
-                    ::fluent_web_client::internal::serde::Serialize,
-                    ::fluent_web_client::internal::serde::Deserialize
+                    ::fluent_web_runtime::internal::serde::Serialize,
+                    ::fluent_web_runtime::internal::serde::Deserialize
                 )]
-                #[serde(crate="::fluent_web_client::internal::serde")]
+                #[serde(crate="::fluent_web_runtime::internal::serde")]
                 #event
-                impl #{&generics.impl_generics} ::fluent_web_client::internal::Event for #{&event.ident} #used_generics {
+                impl #{&generics.impl_generics} ::fluent_web_runtime::internal::Event for #{&event.ident} #used_generics {
                     const NAME: &'static str = #{event.ident.to_string()};
                 }
             }
@@ -47,12 +43,12 @@ fn compile_events_internal(
             #(for event in events) {
                 #(let (used_generics, _, _) = event.generics.split_for_impl()) {
                     #[derive(
-                        ::fluent_web_client::internal::serde::Serialize,
-                        ::fluent_web_client::internal::serde::Deserialize
+                        ::fluent_web_runtime::internal::serde::Serialize,
+                        ::fluent_web_runtime::internal::serde::Deserialize
                     )]
-                    #[serde(crate="::fluent_web_client::internal::serde")]
+                    #[serde(crate="::fluent_web_runtime::internal::serde")]
                     pub struct #{&event.ident} #{&generics.ty_generics} (pub super::#{&event.ident} #used_generics, pub #{&generics.phantom});
-                    impl #{&generics.ty_generics} ::fluent_web_client::internal::EventWrapper for #{&event.ident} #{&generics.ty_generics} #{&generics.where_clauses} {
+                    impl #{&generics.ty_generics} ::fluent_web_runtime::internal::EventWrapper for #{&event.ident} #{&generics.ty_generics} #{&generics.where_clauses} {
                         type Real = super::#{&event.ident} #used_generics;
                     }
                 }

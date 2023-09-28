@@ -61,3 +61,8 @@ macro_rules! render_component {
         $crate::internal::render_component::<$($path)::*::Component<$($generic),*>>($id);
     };
 }
+
+///
+pub fn forget<C: internal::Component>(comp: internal::Wrapped<C>) {
+    std::mem::forget(comp);
+}

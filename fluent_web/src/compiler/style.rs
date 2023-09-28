@@ -5,8 +5,7 @@ use std::convert::Infallible;
 
 use lightningcss::visitor::Visit;
 
-use super::utils::{extract_format_strings, uuid};
-use super::utils::{modify_html, ModifiedHtmlInfo};
+use super::utils::{extract_format_strings, modify_html, uuid, ModifiedHtmlInfo};
 use super::DefCallPair;
 use crate::prelude::*;
 
@@ -56,30 +55,30 @@ impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
             }
         }
 
-        let where_clause =
-            lightningcss::selector::Component::Where(Box::new([
-                lightningcss::selector::Selector::from(vec![
-                    lightningcss::selector::Component::ID(
-                        self.replacement_string.clone().into(),
-                    ),
-                    lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
-                    lightningcss::selector::Component::ExplicitUniversalType,
-                    lightningcss::selector::Component::Negation(Box::new([
-                        lightningcss::selector::Selector::from(vec![
-                            lightningcss::selector::Component::ID(
-                                self.replacement_string.clone().into(),
-                            ),
-                            lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
-                            lightningcss::selector::Component::Class(
-                                "__Fluent_Component".into(),
-                            ),
-                            lightningcss::selector::Component::Combinator(lightningcss::selector::Combinator::Descendant),
-                            lightningcss::selector::Component::ExplicitUniversalType,
-                            ]),
-                        ])
-                    )
-                ]),
-            ]));
+        let where_clause = lightningcss::selector::Component::Where(Box::new([
+            lightningcss::selector::Selector::from(vec![
+                lightningcss::selector::Component::ID(self.replacement_string.clone().into()),
+                lightningcss::selector::Component::Combinator(
+                    lightningcss::selector::Combinator::Descendant,
+                ),
+                lightningcss::selector::Component::ExplicitUniversalType,
+                lightningcss::selector::Component::Negation(Box::new([
+                    lightningcss::selector::Selector::from(vec![
+                        lightningcss::selector::Component::ID(
+                            self.replacement_string.clone().into(),
+                        ),
+                        lightningcss::selector::Component::Combinator(
+                            lightningcss::selector::Combinator::Descendant,
+                        ),
+                        lightningcss::selector::Component::Class("__Fluent_Component".into()),
+                        lightningcss::selector::Component::Combinator(
+                            lightningcss::selector::Combinator::Descendant,
+                        ),
+                        lightningcss::selector::Component::ExplicitUniversalType,
+                    ]),
+                ])),
+            ]),
+        ]));
 
         segements[0].0.push(where_clause.clone());
 
@@ -91,20 +90,14 @@ impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
             .into_iter()
             .flat_map(|(mut components, combinator)| {
                 if let Some(comb) = combinator {
-                    components.insert(
-                        0,
-                        lightningcss::selector::Component::Combinator(
-                            comb,
-                        ),
-                    );
+                    components.insert(0, lightningcss::selector::Component::Combinator(comb));
                     components
                 } else {
                     components
                 }
             })
             .collect::<Vec<_>>();
-        let new_selector: lightningcss::selector::Selector =
-            segements.into();
+        let new_selector: lightningcss::selector::Selector = segements.into();
         *selector = new_selector;
 
         Ok(())
@@ -112,10 +105,8 @@ impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
 }
 
 /// Transforms the css by adding the returned string as a placeholder for the rootname
-/// This scopes the css to the specific component using the same selector as the `fluent_web_client`
-fn transform_stylesheet(
-    css: &mut lightningcss::stylesheet::StyleSheet,
-) -> String {
+/// This scopes the css to the specific component using the same selector as the `fluent_web_runtime`
+fn transform_stylesheet(css: &mut lightningcss::stylesheet::StyleSheet) -> String {
     let mut trans = CssTransformer::new();
     css.visit(&mut trans).unwrap();
     trans.replacement_string
@@ -151,21 +142,20 @@ fn compile_css_vars(
     var: &ModifiedHtmlInfo,
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<DefCallPair> {
-    let (format_string, expressions) =
-        extract_format_strings(&var.value)?;
+    let (format_string, expressions) = extract_format_strings(&var.value)?;
 
     let function_name = quote::format_ident!("update_css_{}", uuid());
     let selector = format!(".{}", var.id);
 
     let def = quote!(
-        fn #function_name(&self, __Fluent_S: Option<String>) {
+        fn #function_name(&mut gself, __Fluent_S: Option<&str>) {
             #{&data.unpack_ref}
 
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
+            let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(&self.root_name, #selector, __Fluent_S);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 let __Fluent_Value = ::std::format!(#format_string, #(#expressions),*);
-                use fluent_web_client::internal::wasm_bindgen::JsCast;
-                let __Fluent_Element = __Fluent_Element.dyn_into::<::fluent_web_client::internal::web_sys::HtmlElement>().unwrap();
+                use fluent_web_runtime::internal::wasm_bindgen::JsCast;
+                let __Fluent_Element = __Fluent_Element.dyn_into::<::fluent_web_runtime::internal::web_sys::HtmlElement>().unwrap();
                 __Fluent_Element.style().set_property(#{format!("--{}", var.attribute)}, &__Fluent_Value).unwrap();
             }
 

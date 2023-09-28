@@ -1,9 +1,7 @@
 //! Compiler event listeners
 
-use super::{
-    utils::{modify_html_code, uuid, ModifiedHtmlInfoWithCode},
-    DefCallPair,
-};
+use super::utils::{modify_html_code, uuid, ModifiedHtmlInfoWithCode};
+use super::DefCallPair;
 use crate::prelude::*;
 
 /// Create the event listeners
@@ -12,40 +10,30 @@ fn compile_native_listener(
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<DefCallPair> {
     let function_name = quote::format_ident!("set_event_{}", uuid());
-    let function_name_internal =
-        quote::format_ident!("{}_internal", function_name);
+    let function_name_internal = quote::format_ident!("{}_internal", function_name);
 
     let mut c = event.element.chars();
     let element_name_cap = c
         .next()
-        .ok_or_else(|| {
-            Compiler::WrongSyntax(String::from(
-                "Event handler cant be empty name",
-            ))
-        })?
+        .ok_or_else(|| Compiler::WrongSyntax(String::from("Event handler cant be empty name")))?
         .to_ascii_uppercase()
         .to_string()
         + c.as_str();
-    let element_type =
-        quote::format_ident!("Html{}Element", element_name_cap);
+    let element_type = quote::format_ident!("Html{}Element", element_name_cap);
 
     let event_reading = {
         // Just ask people to downcast it themself?
         let first = &event.code.inputs[0];
         let event_type = if let syn::Pat::Type(syn::PatType {
-            ty:
-                box syn::Type::Reference(syn::TypeReference {
-                    elem: box ty,
-                    ..
-                }),
+            ty: box syn::Type::Reference(syn::TypeReference { elem: box ty, .. }),
             ..
         }) = first
         {
             quote!(#ty)
         } else {
-            quote!(::fluent_web_client::internal::web_sys::Event)
+            quote!(::fluent_web_runtime::internal::web_sys::Event)
         };
-        quote!(let __Fluent_Event = event.dyn_ref::<#event_type>().unwrap();)
+        quote!(let __Fluent_Event = __Fluent_Event.dyn_ref::<#event_type>().unwrap();)
     };
 
     let second = &mut event.code.inputs[1];
@@ -58,35 +46,41 @@ fn compile_native_listener(
 
     let selector = format!(".{}", event.id);
     let set_event_handler = quote!(
-        fn #function_name_internal(self, __Fluent_Element: ::fluent_web_client::internal::web_sys::Element) {
-            use ::fluent_web_client::internal::wasm_bindgen::JsCast;
-
-            let __Fluent_Element: &::fluent_web_client::internal::web_sys::#element_type = __Fluent_Element.dyn_ref().unwrap();
-            let __Fluent_Element_Clone = __Fluent_Element.clone();
-
-            let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
-                #event_reading
-                {
-                    #{&data.unpack_mut}
-                    (#{&event.code})(__Fluent_Event, &__Fluent_Element_Clone);
-                }
-                use ::fluent_web_client::internal::Component;
-                self.update_changed_values();
-            });
-            __Fluent_Element.add_event_listener_with_callback(#{&event.attribute}, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
-            __Fluent_Function.forget();
+        fn #function_name_internal(
+                &mut self,
+                __Fluent_Event: ::fluent_web_runtime::internal::web_sys::Event,
+                __Fluent_Element: &::fluent_web_runtime::internal::web_sys::#element_type
+            ) {
+            use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
+            #event_reading
+            {
+                #{&data.unpack_mut}
+                (#{&event.code})(__Fluent_Event, __Fluent_Element);
+            }
+            self.update_changed_values();
         }
 
-        fn #function_name(&self, __Fluent_S: Option<String>) {
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
+        fn #function_name(comp: ::fluent_web_runtime::internal::WeakRef<Self>, __Fluent_S: Option<&str>) {
+            use ::fluent_web_runtime::internal::Component;
+            let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(comp.upgrade().unwrap().borrow().root(), #selector, __Fluent_S);
 
             for __Fluent_Element in __Fluent_Elements.into_iter() {
-                self.clone().#function_name_internal(__Fluent_Element);
+                use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
+
+                let __Fluent_Element_Typed = __Fluent_Element.dyn_ref::<::fluent_web_runtime::internal::web_sys::#element_type>().unwrap().to_owned();
+
+                let comp_clone = comp.clone();
+                let __Fluent_Function = ::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_runtime::internal::web_sys::Event| {
+                    comp_clone.upgrade().unwrap().borrow_mut().#function_name_internal(event, &__Fluent_Element_Typed);
+                });
+
+                __Fluent_Element.add_event_listener_with_callback(#{&event.attribute}, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
+                __Fluent_Function.forget();
             }
         }
     );
 
-    let call = quote!(self.#function_name(root.clone()););
+    let call = quote!(Self::#function_name(comp.clone(), root.clone()););
 
     Ok(DefCallPair {
         def: set_event_handler,
@@ -96,29 +90,20 @@ fn compile_native_listener(
 
 /// Compile custom event listeners
 fn compile_custom_listener(
-    mut event: ModifiedHtmlInfoWithCode<
-        syn::ExprClosure,
-        proc_macro2::TokenStream,
-    >,
+    mut event: ModifiedHtmlInfoWithCode<syn::ExprClosure, proc_macro2::TokenStream>,
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<DefCallPair> {
     let function_name = quote::format_ident!("set_event_{}", uuid());
-    let function_name_internal =
-        quote::format_ident!("{}_internal", function_name);
+    let function_name_internal = quote::format_ident!("{}_internal", function_name);
 
     let event_reading = {
-        let component_path: syn::Path =
-            syn::parse2(event.src.clone())?;
-        let mut segments: syn::punctuated::IntoIter<
-            syn::PathSegment,
-        > = component_path.segments.into_iter();
-        let last = segments.next_back().ok_or_else(|| {
-            Compiler::WrongSyntax(String::from(
-                "Invalid component path",
-            ))
-        })?;
-        let mut segments =
-            segments.map(|p| quote!(#p)).collect::<Vec<_>>();
+        let component_path: syn::Path = syn::parse2(event.src.clone())?;
+        let mut segments: syn::punctuated::IntoIter<syn::PathSegment> =
+            component_path.segments.into_iter();
+        let last = segments
+            .next_back()
+            .ok_or_else(|| Compiler::WrongSyntax(String::from("Invalid component path")))?;
+        let mut segments = segments.map(|p| quote!(#p)).collect::<Vec<_>>();
 
         let syn::PathSegment {
             ident, arguments, ..
@@ -130,16 +115,13 @@ fn compile_custom_listener(
         let segments_combined = quote::quote!(#(#segments)::*);
         let event_type = quote!(
             <#segments_combined ::__Fluent_Events:: #event_name #arguments
-                as ::fluent_web_client::internal::EventWrapper>
+                as ::fluent_web_runtime::internal::EventWrapper>
             ::Real
         );
 
-        let first =
-            event.code.inputs.first_mut().ok_or_else(|| {
-                Compiler::WrongSyntax(String::from(
-                    "Expected handler to have one attribute",
-                ))
-            })?;
+        let first = event.code.inputs.first_mut().ok_or_else(|| {
+            Compiler::WrongSyntax(String::from("Expected handler to have one attribute"))
+        })?;
         *first = syn::Pat::Type(syn::PatType {
             attrs: vec![],
             pat: Box::new(first.clone()),
@@ -148,44 +130,49 @@ fn compile_custom_listener(
         });
 
         quote!(
-            let __Fluent_Custom_Event = event.dyn_ref::<::fluent_web_client::internal::web_sys::CustomEvent>().unwrap();
+            let Some(__Fluent_Custom_Event) = __Fluent_Event.dyn_ref::<::fluent_web_runtime::internal::web_sys::CustomEvent>() else {return;};
             let __Fluent_Details = __Fluent_Custom_Event.detail();
-            let __Fluent_Details = __Fluent_Details.dyn_ref::<::fluent_web_client::internal::js_sys::Uint8Array>().unwrap();
-            let __Fluent_Event: #event_type = ::fluent_web_client::internal::bincode::deserialize(&__Fluent_Details.to_vec()).unwrap();
+            let __Fluent_Details = __Fluent_Details.dyn_ref::<::fluent_web_runtime::internal::js_sys::Uint8Array>().unwrap();
+            let __Fluent_Event: #event_type = ::fluent_web_runtime::internal::bincode::deserialize(&__Fluent_Details.to_vec()).unwrap();
         )
     };
 
     let selector = format!(".{}", event.id);
     let set_event_handler = quote!(
-        fn #function_name_internal(self, __Fluent_Element: ::fluent_web_client::internal::web_sys::Element) {
-            use ::fluent_web_client::internal::wasm_bindgen::JsCast;
-
-            let __Fluent_Element: &::fluent_web_client::internal::web_sys::Element = __Fluent_Element.dyn_ref().unwrap();
-            let __Fluent_Element_Clone = __Fluent_Element.clone();
-
-            let __Fluent_Function = ::fluent_web_client::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_client::internal::web_sys::Event| {
-                #event_reading
-                {
-                    #{&data.unpack_mut}
-                    (#{&event.code})(__Fluent_Event);
-                }
-                use ::fluent_web_client::internal::Component;
-                self.update_changed_values();
-            });
-            __Fluent_Element.add_event_listener_with_callback(#{&event.attribute}, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
-            __Fluent_Function.forget();
+        fn #function_name_internal(
+                &mut self,
+                __Fluent_Event: ::fluent_web_runtime::internal::web_sys::Event
+            ) {
+            use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
+            #event_reading
+            {
+                #{&data.unpack_mut}
+                (#{&event.code})(__Fluent_Event);
+            }
+            self.update_changed_values();
         }
 
-        fn #function_name(&self, __Fluent_S: Option<String>) {
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
+        fn #function_name(comp: ::fluent_web_runtime::internal::WeakRef<Self>, __Fluent_S: Option<&str>) {
+            use ::fluent_web_runtime::internal::Component;
+            let __Fluent_Elements =
+                ::fluent_web_runtime::internal
+                ::get_elements(comp.upgrade().unwrap().borrow().root(), #selector, __Fluent_S);
 
             for __Fluent_Element in __Fluent_Elements.into_iter() {
-                self.clone().#function_name_internal(__Fluent_Element);
+                use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
+
+                let comp_clone = comp.clone();
+                let __Fluent_Function = ::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_runtime::internal::web_sys::Event| {
+                    comp_clone.upgrade().unwrap().borrow_mut().#function_name_internal(event);
+                });
+
+                __Fluent_Element.add_event_listener_with_callback(#{&event.attribute}, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
+                __Fluent_Function.forget();
             }
         }
     );
 
-    let call = quote!(self.#function_name(root.clone()););
+    let call = quote!(Self::#function_name(comp.clone(), root.clone()););
 
     Ok(DefCallPair {
         def: set_event_handler,

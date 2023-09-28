@@ -19,20 +19,19 @@ fn compile_stmt(
     reactive_text: &ReactiveText,
     data: &super::data_and_props::Unwraps,
 ) -> DefCallPair {
-    let function_name =
-        quote::format_ident!("update_element_{}", reactive_text.id);
+    let function_name = quote::format_ident!("update_element_{}", reactive_text.id);
 
     let selector = format!(".{}", reactive_text.id);
     let def = quote! {
-        fn #function_name(&self, __Fluent_S: Option<String>) {
+        fn #function_name(&mut self, __Fluent_S: Option<&str>) {
             #{&data.unpack_ref}
 
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
+            let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(&self.root_name, #selector, __Fluent_S);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 let __Fluent_Text = &::std::format!(
                     #{&reactive_text.text},
                     #(for expr in &reactive_text.expressions) , {
-                        ::fluent_web_client::internal::display(&(#expr))
+                        ::fluent_web_runtime::internal::display(&(#expr))
                     }
                 );
                 __Fluent_Element.set_text_content(::std::option::Option::Some(__Fluent_Text));
@@ -48,9 +47,7 @@ fn compile_stmt(
 
 /// Find all text with {} and replace the text with a <span> that can be targeted by code.
 #[allow(clippy::needless_pass_by_value)]
-fn modify_html(
-    node: kuchikiki::NodeRef,
-) -> CompilerResult<Vec<ReactiveText>> {
+fn modify_html(node: kuchikiki::NodeRef) -> CompilerResult<Vec<ReactiveText>> {
     use kuchikiki::NodeData;
     use markup5ever::namespace_url;
     match node.data() {
@@ -64,8 +61,7 @@ fn modify_html(
 
         NodeData::Text(text) => {
             let text = text.borrow();
-            let (format_string, expressions) =
-                extract_format_strings(&text)?;
+            let (format_string, expressions) = extract_format_strings(&text)?;
 
             if expressions.is_empty() {
                 return Ok(vec![]);

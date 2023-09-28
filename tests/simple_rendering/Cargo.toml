@@ -8,5 +8,3 @@ edition = "2021"
 [dev-dependencies]
 thirtyfour = "*"
 tokio = "*"
-
-[workspace]

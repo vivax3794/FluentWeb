@@ -1,55 +1,57 @@
 // This code is called by generated code and should always be sound.
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    fmt::{Debug, Display},
-    ops::{Deref, DerefMut},
-    rc::Rc,
-};
+use std::cell::{Cell, RefCell};
+use std::fmt::{Debug, Display};
+use std::ops::{Deref, DerefMut};
+use std::rc::{Rc, Weak};
 
-pub use base64;
-pub use bincode;
 pub use derivative::Derivative;
-pub use js_sys;
-pub use serde;
-pub use wasm_bindgen;
-pub use web_sys;
-
 use wasm_bindgen::JsCast;
+pub use {base64, bincode, js_sys, serde, wasm_bindgen, web_sys};
 
-pub trait Component: Clone {
+pub type Wrapped<C> = Rc<RefCell<C>>;
+pub type WeakRef<C> = Weak<RefCell<C>>;
+
+pub trait Component {
     fn render_init(&self) -> String;
-    fn create(root_id: String) -> Self;
+    fn create(root_id: Box<str>) -> Self;
+    fn root(&self) -> &str;
 
-    fn setup_onetime(&self, root: Option<String>);
-    fn update_all(&self, root: Option<String>);
-    fn update_props(&self);
-
-    fn setup_watcher(component: Self, root_name: &str)
-    where
-        Self: 'static,
-    {
-        let function = move || component.update_props();
-        let function =
-            wasm_bindgen::closure::Closure::<dyn Fn()>::new(function);
-        let js_function = function.as_ref().unchecked_ref();
-        let observer =
-            web_sys::MutationObserver::new(js_function).unwrap();
-        function.forget();
-
-        let element = get_by_id(root_name);
-
-        let mut options = web_sys::MutationObserverInit::new();
-        options.attributes(true);
-        observer.observe_with_options(&element, &options).unwrap();
-    }
+    fn setup_onetime(component: WeakRef<Self>, root: Option<&str>);
+    fn update_all(&mut self, root: Option<&str>);
+    fn update_props(&mut self);
 }
 
-pub fn render_component<C: Component + 'static>(mount_point: &str) {
+fn setup_watcher<C: Component + 'static>(component: WeakRef<C>, root_name: &str) {
+    let function = move || {
+        component
+            .upgrade()
+            .expect("Component despawned")
+            .borrow_mut()
+            .update_props();
+    };
+    let function = wasm_bindgen::closure::Closure::<dyn Fn()>::new(function);
+    let js_function = function.as_ref().unchecked_ref();
+    let observer = web_sys::MutationObserver::new(js_function).unwrap();
+    function.forget();
+
+    let element = get_by_id(root_name);
+
+    let mut options = web_sys::MutationObserverInit::new();
+    options.attributes(true);
+    observer.observe_with_options(&element, &options).unwrap();
+}
+
+#[must_use = "This is the only strong reference to this component, if this is dropped then nothing will work. consider using `fluent_web_runtime::forget` to leak its memory and keep it alive until the end of the program."]
+pub fn render_component<C: Component + 'static>(mount_point: impl Into<Box<str>>) -> Wrapped<C> {
+    // WORKAROUND: bug in rust analyzer makes it see this type wrong
+    // WORKAROUND: https://github.com/rust-lang/rust-analyzer/issues/5514
+    let mount_point: Box<str> = mount_point.into();
+
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
-    let element = document.get_element_by_id(mount_point).unwrap();
+    let element = document.get_element_by_id(&mount_point).unwrap();
 
     element.class_list().add_1("__Fluent_Component").unwrap();
     element
@@ -57,17 +59,22 @@ pub fn render_component<C: Component + 'static>(mount_point: &str) {
         .remove_1("__Fluent_Needs_Init")
         .unwrap();
 
-    let component = C::create(mount_point.to_owned());
+    let mut component = C::create(mount_point);
     element.set_inner_html(&component.render_init());
-    C::setup_watcher(component.clone(), mount_point);
-    component.setup_onetime(None);
     component.update_all(None);
+
+    let component = Rc::new(RefCell::new(component));
+
+    setup_watcher(Rc::downgrade(&component), component.borrow().root());
+    C::setup_onetime(Rc::downgrade(&component), None);
+
+    component
 }
 
 #[must_use]
-pub fn uuid() -> String {
+pub fn uuid() -> Box<str> {
     let id = uuid::Uuid::new_v4().to_string();
-    format!("__Fluent_UUID_{id}")
+    format!("__Fluent_UUID_{id}").into_boxed_str()
 }
 
 #[must_use]
@@ -79,13 +86,9 @@ pub fn get_by_id(id: &str) -> web_sys::Element {
 }
 
 #[must_use]
-pub fn get_element(
-    component_id: &str,
-    element_id: &str,
-) -> web_sys::Element {
-    let selector = ::std::format!(
-        "#{component_id} #{element_id}:not(#{component_id} .__Fluent_Component *)"
-    );
+pub fn get_element(component_id: &str, element_id: &str) -> web_sys::Element {
+    let selector =
+        ::std::format!("#{component_id} #{element_id}:not(#{component_id} .__Fluent_Component *)");
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     document.query_selector(&selector).unwrap().unwrap()
@@ -96,7 +99,7 @@ pub fn get_element(
 pub fn get_elements(
     component_id: &str,
     selector: &str,
-    root_selector: Option<String>,
+    root_selector: Option<&str>,
 ) -> Vec<web_sys::Element> {
     let selector = ::std::format!(
         "#{} {} {}:not(#{} .__Fluent_Component *)",
@@ -155,75 +158,74 @@ pub fn log(msg: &str) {
     web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(msg));
 }
 
-#[derive(Derivative, Debug)]
-#[derivative(Clone(bound = ""))]
+#[derive(Debug)]
 pub struct ChangeDetector<T> {
-    value: Rc<RefCell<T>>,
-    read: Rc<RefCell<bool>>,
-    write: Rc<RefCell<bool>>,
+    value: T,
+    read: Cell<bool>,
+    write: bool,
 }
 
 impl<T> ChangeDetector<T> {
     pub fn new(value: T) -> Self {
         Self {
-            value: Rc::new(RefCell::new(value)),
-            read: Rc::new(RefCell::new(false)),
-            write: Rc::new(RefCell::new(false)),
+            value,
+            read: Cell::new(false),
+            write: false,
         }
     }
 
     #[must_use]
     pub fn was_read(&self) -> bool {
-        *self.read.borrow()
+        self.read.get()
     }
 
     #[must_use]
     pub fn was_written(&self) -> bool {
-        *self.write.borrow()
+        self.write
     }
 
-    pub fn clear(&self) {
-        *self.read.borrow_mut() = false;
-        *self.write.borrow_mut() = false;
+    pub fn clear(&mut self) {
+        self.read.set(false);
+        self.write = false;
     }
 
     #[must_use]
     pub fn borrow(&self) -> ChangeDetectorRead<T> {
         ChangeDetectorRead {
-            value: self.value.borrow(),
-            read: Rc::clone(&self.read),
+            value: &self.value,
+            read: &self.read,
         }
     }
 
     #[must_use]
-    pub fn borrow_mut(&self) -> ChangeDetectorWrite<T> {
+    pub fn borrow_mut(&mut self) -> ChangeDetectorWrite<T> {
         ChangeDetectorWrite {
-            value: self.value.borrow_mut(),
-            read: Rc::clone(&self.read),
-            write: Rc::clone(&self.write),
+            value: &mut self.value,
+            read: &self.read,
+            write: &mut self.write,
         }
     }
 }
 
 #[derive(Debug)]
 pub struct ChangeDetectorRead<'a, T> {
-    value: Ref<'a, T>,
-    read: Rc<RefCell<bool>>,
+    value: &'a T,
+    read: &'a Cell<bool>,
 }
 
 #[derive(Debug)]
 pub struct ChangeDetectorWrite<'a, T> {
-    value: RefMut<'a, T>,
-    read: Rc<RefCell<bool>>,
-    write: Rc<RefCell<bool>>,
+    value: &'a mut T,
+    read: &'a Cell<bool>,
+    write: &'a mut bool,
 }
 
 impl<'a, T> Deref for ChangeDetectorRead<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        *self.read.borrow_mut() = true;
-        &self.value
+        self.read.set(true);
+        self.value
     }
 }
 
@@ -231,16 +233,16 @@ impl<'a, T> Deref for ChangeDetectorWrite<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        *self.read.borrow_mut() = true;
-        &self.value
+        self.read.set(true);
+        self.value
     }
 }
 
 impl<'a, T> DerefMut for ChangeDetectorWrite<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        *self.read.borrow_mut() = true;
-        *self.write.borrow_mut() = true;
-        &mut self.value
+        self.read.set(true);
+        *self.write = true;
+        self.value
     }
 }
 
@@ -258,15 +260,9 @@ impl<'a, T: DomDisplay> DomDisplay for ChangeDetectorWrite<'a, T> {
     }
 }
 
-pub trait UseInEvent:
-    serde::Serialize + for<'a> serde::Deserialize<'a>
-{
-}
+pub trait UseInEvent: serde::Serialize + for<'a> serde::Deserialize<'a> {}
 
-impl<T> UseInEvent for T where
-    T: serde::Serialize + for<'a> serde::Deserialize<'a>
-{
-}
+impl<T> UseInEvent for T where T: serde::Serialize + for<'a> serde::Deserialize<'a> {}
 
 pub trait EventWrapper {
     type Real;

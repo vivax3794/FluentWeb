@@ -1,9 +1,7 @@
 //! Subcompoent <component> syntax
 
-use super::{
-    utils::{add_class, uuid},
-    DefCallPair,
-};
+use super::utils::{add_class, uuid};
+use super::DefCallPair;
 use crate::prelude::*;
 
 /// Data used to create sub components
@@ -16,19 +14,14 @@ struct SubComponentData {
 
 /// This finds <componet> tags, parses and stores its `src` and then replaces it with a <div>
 #[allow(clippy::needless_pass_by_value)]
-fn find_subcomponents(
-    node: kuchikiki::NodeRef,
-) -> CompilerResult<Vec<SubComponentData>> {
+fn find_subcomponents(node: kuchikiki::NodeRef) -> CompilerResult<Vec<SubComponentData>> {
     use kuchikiki::NodeData;
     use markup5ever::namespace_url;
 
     match node.data() {
-        NodeData::Element(data)
-            if &data.name.local == "component" =>
-        {
+        NodeData::Element(data) if &data.name.local == "component" => {
             let attributes = data.attributes.borrow();
-            let component_name =
-                attributes.get("src").ok_or(Compiler::MissingSrc)?;
+            let component_name = attributes.get("src").ok_or(Compiler::MissingSrc)?;
             let component_name = syn::parse_str(component_name)?;
             let id = uuid();
 
@@ -64,21 +57,21 @@ fn find_subcomponents(
 
 /// Create the calls used for creating sub components
 fn compile_stmt(data: SubComponentData) -> DefCallPair {
-    let function_name =
-        quote::format_ident!("spawn_component_{}", data.id);
+    let function_name = quote::format_ident!("spawn_component_{}", data.id);
 
     let selector = format!(".{}.__Fluent_Needs_Init", data.id);
     let function_def = quote!(
-        fn #function_name(&self, __Fluent_S: Option<String>) {
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
+        fn #function_name(&self, __Fluent_S: Option<&str>) {
+            use ::fluent_web_runtime::internal::Component;
+            let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(self.root(), #selector, __Fluent_S);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
-                let __Fluent_Id = ::fluent_web_client::internal::uuid();
+                let __Fluent_Id = ::fluent_web_runtime::internal::uuid();
                 __Fluent_Element.set_id(&__Fluent_Id);
-                ::fluent_web_client::render_component!(#{data.component_name}, &__Fluent_Id);
+                ::fluent_web_runtime::forget(::fluent_web_runtime::render_component!(#{data.component_name}, &*__Fluent_Id));
             }
         }
     );
-    let function_call = quote!(self.#function_name(root.clone()););
+    let function_call = quote!(comp.upgrade().unwrap().borrow().#function_name(root.clone()););
 
     DefCallPair {
         def: function_def,
@@ -87,9 +80,7 @@ fn compile_stmt(data: SubComponentData) -> DefCallPair {
 }
 
 /// Compile subcomponents inits
-pub fn compile(
-    html: kuchikiki::NodeRef,
-) -> CompilerResult<Vec<DefCallPair>> {
+pub fn compile(html: kuchikiki::NodeRef) -> CompilerResult<Vec<DefCallPair>> {
     let nodes = find_subcomponents(html)?;
     Ok(nodes.into_iter().map(compile_stmt).collect())
 }

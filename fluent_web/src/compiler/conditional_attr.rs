@@ -1,26 +1,22 @@
 //! Compile ?abc="something" attributes
 
-use crate::prelude::*;
-
-use super::utils::{
-    modify_html_code, uuid, ModifiedHtmlInfoWithCode,
-};
+use super::utils::{modify_html_code, uuid, ModifiedHtmlInfoWithCode};
 use super::DefCallPair;
+use crate::prelude::*;
 
 /// Compile a conditional attribute
 fn compile_stmt(
     attribute: &ModifiedHtmlInfoWithCode<syn::Expr>,
     data: &super::data_and_props::Unwraps,
 ) -> DefCallPair {
-    let function_name =
-        quote::format_ident!("update_attribute_{}", uuid());
+    let function_name = quote::format_ident!("update_attribute_{}", uuid());
 
     let selector = format!(".{}", attribute.id);
     let update_def = quote!(
-        fn #function_name(&self, __Fluent_S: Option<String>) {
+        fn #function_name(&mut self, __Fluent_S: Option<&str>) {
             #{&data.unpack_ref}
 
-            let __Fluent_Elements = ::fluent_web_client::internal::get_elements(&self.root_name, #selector, __Fluent_S);
+            let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(&self.root_name, #selector, __Fluent_S);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 if #{&attribute.code} {
                     __Fluent_Element.set_attribute(#{&attribute.attribute}, "").unwrap();

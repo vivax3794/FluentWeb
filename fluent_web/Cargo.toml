@@ -9,7 +9,7 @@ repository = "https://github.com/vivax3794/FluentWeb"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-thiserror = "1.0.48"
+thiserror = "1"
 html5ever = "0.26.0"
 kuchikiki = "0.8.2"
 lightningcss = { version = "1.0.0-alpha.46", default-features = false, features = [
@@ -17,15 +17,15 @@ lightningcss = { version = "1.0.0-alpha.46", default-features = false, features 
     "grid",
 ] }
 markup5ever = "0.11.0"
-prettyplease = "0.2.15"
-proc-macro2 = "1.0.67"
+prettyplease = "0.2"
+proc-macro2 = "1.0"
 template-quote = "0.3.0"
-quote = "1.0.33"
-syn = { version = "2.0.35", default-features = false, features = [
+quote = "1.0"
+syn = { version = "2.0", default-features = false, features = [
     "parsing",
     "printing",
     "proc-macro",
     "full",
     "clone-impls",
 ] }
-uuid = { version = "1.4.1", features = ["v4"] }
+uuid = { version = "1.4", features = ["v4"] }

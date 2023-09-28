@@ -26,7 +26,7 @@ async fn test_expression() -> WebDriverResult<()> {
 
     let body = driver.find(By::Tag("body")).await?;
     let text = body.text().await?;
-    assert!(text.contains("4"));
+    assert!(text.contains('4'));
 
     Ok(())
 }

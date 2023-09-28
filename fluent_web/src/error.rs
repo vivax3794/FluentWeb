@@ -27,9 +27,7 @@ pub enum Compiler {
     #[error("Css parse error: {0}")]
     CssPraseError(String),
     /// Component missing src attribute
-    #[error(
-        "<component> tag needs a src attribute to point to component"
-    )]
+    #[error("<component> tag needs a src attribute to point to component")]
     MissingSrc,
 }
 

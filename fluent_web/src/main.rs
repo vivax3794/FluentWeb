@@ -43,6 +43,7 @@ mod error;
 mod prelude;
 
 fn main() -> ExitCode {
+    println!("HELLO WORLD!");
     match compiler::compile_project() {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {

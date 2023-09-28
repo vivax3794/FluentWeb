@@ -1,11 +1,10 @@
 [package]
-name = "TestTemplate"
+name = "test_template"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fluent_web_client = { path = "../fluent_web_client" }
-
-[workspace]
+fluent_web_runtime = { path = "../fluent_web_runtime" }
+console_error_panic_hook = "*"

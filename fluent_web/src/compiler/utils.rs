@@ -4,10 +4,7 @@ use crate::error::{Compiler, CompilerResult};
 
 /// Find top level tags as a proper html parser would "corrupt" the content of the rust tags
 #[must_use]
-pub fn find_top_level_tag<'a>(
-    document: &'a str,
-    tag: &str,
-) -> Option<&'a str> {
+pub fn find_top_level_tag<'a>(document: &'a str, tag: &str) -> Option<&'a str> {
     let open_tag = format!("<{tag}>");
     let close_tag = format!("</{tag}>");
 
@@ -27,29 +24,23 @@ pub fn uuid() -> String {
 
 /// Add a class to the `class` attribute on a node
 /// This also creates the class attribute if it is not present.
-#[allow(clippy::expect_used)]
-pub fn add_class(
-    attributes: &mut kuchikiki::Attributes,
-    class: &str,
-) {
-    let current_class =
-        if let Some(value) = attributes.get_mut("class") {
-            value
-        } else {
-            attributes.insert("class", String::new());
-            attributes
-                .get_mut("class")
-                .expect("Newly inserted class to be there")
-        };
+pub fn add_class(attributes: &mut kuchikiki::Attributes, class: &str) {
+    let current_class = if let Some(value) = attributes.get_mut("class") {
+        value
+    } else {
+        attributes.insert("class", String::new());
+        #[allow(clippy::expect_used)]
+        attributes
+            .get_mut("class")
+            .expect("Newly inserted class to be there")
+    };
 
     current_class.push(' ');
     current_class.push_str(class);
 }
 
 /// Extract rust code from format strings returning the string with just {} and a vector of the expressions
-pub fn extract_format_strings(
-    text: &str,
-) -> CompilerResult<(String, Vec<syn::Expr>)> {
+pub fn extract_format_strings(text: &str) -> CompilerResult<(String, Vec<syn::Expr>)> {
     let mut format_string = String::with_capacity(text.len());
     let mut expressions = Vec::new();
 
@@ -98,10 +89,7 @@ pub struct ModifiedHtmlInfo {
 
 /// Find conditional attributes
 #[allow(clippy::needless_pass_by_value)]
-pub fn modify_html(
-    node: kuchikiki::NodeRef,
-    prefix: &str,
-) -> Vec<ModifiedHtmlInfo> {
+pub fn modify_html(node: kuchikiki::NodeRef, prefix: &str) -> Vec<ModifiedHtmlInfo> {
     use kuchikiki::NodeData;
     match node.data() {
         NodeData::Element(data) => {
@@ -110,9 +98,7 @@ pub fn modify_html(
                 .map
                 .iter()
                 .filter(|&(name, _)| name.local.starts_with(prefix))
-                .map(|(name, content)| {
-                    (name.local.to_string(), content.value.clone())
-                })
+                .map(|(name, content)| (name.local.to_string(), content.value.clone()))
                 .collect::<Vec<_>>();
 
             let mut this_element = if prefixed_attributes.is_empty() {
@@ -138,17 +124,13 @@ pub fn modify_html(
                             attribute: name,
                             value,
                             element: data.name.local.to_string(),
-                            src: attributes
-                                .get("src")
-                                .map(std::borrow::ToOwned::to_owned),
+                            src: attributes.get("src").map(std::borrow::ToOwned::to_owned),
                         }
                     })
                     .collect()
             };
 
-            this_element.extend(
-                node.children().flat_map(|x| modify_html(x, prefix)),
-            );
+            this_element.extend(node.children().flat_map(|x| modify_html(x, prefix)));
             this_element
         }
         _ => vec![],

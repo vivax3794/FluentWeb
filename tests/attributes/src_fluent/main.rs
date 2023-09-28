@@ -1,8 +1,8 @@
-use fluent_web_client::render_component;
+use fluent_web_runtime::{forget, render_component};
 
 mod App;
 mod Sub;
 
 fn main() {
-    render_component!(App, "mount");
+    forget(render_component!(App, "mount"));
 }
