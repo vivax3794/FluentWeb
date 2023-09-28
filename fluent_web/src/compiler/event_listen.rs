@@ -15,7 +15,7 @@ fn compile_native_listener(
     let mut c = event.element.chars();
     let element_name_cap = c
         .next()
-        .ok_or_else(|| Compiler::WrongSyntax(String::from("Event handler cant be empty name")))?
+        .ok_or_else(|| Compiler::WrongSyntax("Event handler cant be empty name"))?
         .to_ascii_uppercase()
         .to_string()
         + c.as_str();
@@ -102,7 +102,7 @@ fn compile_custom_listener(
             component_path.segments.into_iter();
         let last = segments
             .next_back()
-            .ok_or_else(|| Compiler::WrongSyntax(String::from("Invalid component path")))?;
+            .ok_or_else(|| Compiler::WrongSyntax("Invalid component path"))?;
         let mut segments = segments.map(|p| quote!(#p)).collect::<Vec<_>>();
 
         let syn::PathSegment {
@@ -119,9 +119,11 @@ fn compile_custom_listener(
             ::Real
         );
 
-        let first = event.code.inputs.first_mut().ok_or_else(|| {
-            Compiler::WrongSyntax(String::from("Expected handler to have one attribute"))
-        })?;
+        let first = event
+            .code
+            .inputs
+            .first_mut()
+            .ok_or_else(|| Compiler::WrongSyntax("Expected handler to have one attribute"))?;
         *first = syn::Pat::Type(syn::PatType {
             attrs: vec![],
             pat: Box::new(first.clone()),

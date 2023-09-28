@@ -19,7 +19,7 @@ pub enum Compiler {
     Parse(#[from] syn::Error),
     /// Wrong syntax, it is valid rust, but not the format expected
     #[error("Invalid syntax: {0}")]
-    WrongSyntax(String),
+    WrongSyntax(&'static str),
     /// Something wrong with css unparssing
     #[error("Css unparse error: {0}")]
     CssPrintError(#[from] lightningcss::error::PrinterError),

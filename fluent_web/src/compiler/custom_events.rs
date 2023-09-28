@@ -13,9 +13,7 @@ fn parse_events(source_content: &str) -> CompilerResult<Vec<syn::ItemStruct>> {
         .into_iter()
         .map(|item| match item {
             syn::Item::Struct(struct_) => Ok(struct_),
-            _ => Err(Compiler::WrongSyntax(
-                "<events> to only contain structs".into(),
-            )),
+            _ => Err(Compiler::WrongSyntax("<events> to only contain structs")),
         })
         .collect()
 }

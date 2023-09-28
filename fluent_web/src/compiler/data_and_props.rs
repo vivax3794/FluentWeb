@@ -55,7 +55,7 @@ pub fn parse_data_and_props_segement(
                 is_prop,
             }),
             _ => Err(Compiler::WrongSyntax(
-                "expected let mut NAME: TYPE = VALUE;".to_owned(),
+                "expected let mut NAME: TYPE = VALUE;",
             )),
         })
         .collect()

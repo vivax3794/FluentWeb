@@ -148,13 +148,13 @@ fn compile_css_vars(
     let selector = format!(".{}", var.id);
 
     let def = quote!(
-        fn #function_name(&mut gself, __Fluent_S: Option<&str>) {
+        fn #function_name(&mut self, __Fluent_S: Option<&str>) {
             #{&data.unpack_ref}
 
             let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(&self.root_name, #selector, __Fluent_S);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
-                let __Fluent_Value = ::std::format!(#format_string, #(#expressions),*);
-                use fluent_web_runtime::internal::wasm_bindgen::JsCast;
+                let __Fluent_Value = ::std::format!(#format_string #(,#expressions)*);
+                use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
                 let __Fluent_Element = __Fluent_Element.dyn_into::<::fluent_web_runtime::internal::web_sys::HtmlElement>().unwrap();
                 __Fluent_Element.style().set_property(#{format!("--{}", var.attribute)}, &__Fluent_Value).unwrap();
             }
