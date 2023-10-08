@@ -18,7 +18,7 @@ lightningcss = { version = "1.0.0-alpha.46", default-features = false, features 
 ] }
 markup5ever = "0.11.0"
 prettyplease = "0.2"
-proc-macro2 = "1.0"
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
 template-quote = "0.3.0"
 quote = "1.0"
 syn = { version = "2.0", default-features = false, features = [
@@ -29,3 +29,4 @@ syn = { version = "2.0", default-features = false, features = [
     "clone-impls",
 ] }
 uuid = { version = "1.4", features = ["v4"] }
+miette = { version = "5.10.0", features = ["fancy"] }

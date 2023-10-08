@@ -82,8 +82,8 @@ cleanup() {
 # Trap the EXIT signal to run cleanup function
 trap cleanup EXIT
 
-(cd ${TEST_TMP_DIR}; RUSTUP_TOOLCHAIN=stable trunk build)
-(cd ${TEST_TMP_DIR}; RUSTUP_TOOLCHAIN=stable trunk serve --no-autoreload) &
+(cd ${TEST_TMP_DIR}; RUSTUP_TOOLCHAIN=stable trunk build --quiet)
+(cd ${TEST_TMP_DIR}; RUSTUP_TOOLCHAIN=stable trunk serve --no-autoreload --quiet) &
 WEB_SERVER_PID=$!
 echo "TRUNK PID: $WEB_SERVER_PID"
 

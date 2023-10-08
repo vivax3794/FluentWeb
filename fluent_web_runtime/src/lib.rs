@@ -11,6 +11,7 @@
     clippy::missing_docs_in_private_items,
     missing_copy_implementations,
     missing_debug_implementations,
+    clippy::missing_const_for_fn,
     clippy::mixed_read_write_in_expression,
     clippy::panic,
     clippy::partial_pub_fields,
@@ -62,7 +63,7 @@ macro_rules! render_component {
     };
 }
 
-///
-pub fn forget<C: internal::Component>(comp: internal::Wrapped<C>) {
+/// This is just a direct call to `std::mem::forget` with a trait bound on `Component`
+pub const fn forget<C: internal::Component>(comp: internal::Wrapped<C>) {
     std::mem::forget(comp);
 }

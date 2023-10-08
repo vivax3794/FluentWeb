@@ -2,6 +2,7 @@
 
 use super::utils::{extract_format_strings, uuid};
 use super::DefCallPair;
+use crate::compiler::utils::visit_html_nodes;
 use crate::prelude::*;
 
 /// Represents the reactive text in a <span>
@@ -46,25 +47,20 @@ fn compile_stmt(
 }
 
 /// Find all text with {} and replace the text with a <span> that can be targeted by code.
-#[allow(clippy::needless_pass_by_value)]
-fn modify_html(node: kuchikiki::NodeRef) -> CompilerResult<Vec<ReactiveText>> {
+fn modify_html(node: &kuchikiki::NodeRef) -> CompilerResult<Vec<ReactiveText>> {
     use kuchikiki::NodeData;
     use markup5ever::namespace_url;
-    match node.data() {
-        NodeData::Element(_) => Ok(node
-            .children()
-            .map(modify_html)
-            .collect::<CompilerResult<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect()),
 
+    visit_html_nodes(node, |node: &kuchikiki::NodeRef| match node.data() {
         NodeData::Text(text) => {
             let text = text.borrow();
-            let (format_string, expressions) = extract_format_strings(&text)?;
+            let (format_string, expressions) = match extract_format_strings(&text) {
+                Ok(val) => val,
+                Err(err) => return vec![Err(err)],
+            };
 
             if expressions.is_empty() {
-                return Ok(vec![]);
+                return vec![];
             }
 
             let id = uuid();
@@ -90,19 +86,21 @@ fn modify_html(node: kuchikiki::NodeRef) -> CompilerResult<Vec<ReactiveText>> {
             node.insert_after(new_text);
             node.detach();
 
-            Ok(vec![ReactiveText {
+            vec![Ok(ReactiveText {
                 id,
                 text: format_string,
                 expressions,
-            }])
+            })]
         }
-        _ => Ok(vec![]),
-    }
+        _ => vec![],
+    })
+    .into_iter()
+    .collect::<CompilerResult<Vec<_>>>()
 }
 
 /// Modify html and create update functions
 pub fn compile(
-    html: kuchikiki::NodeRef,
+    html: &kuchikiki::NodeRef,
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<Vec<DefCallPair>> {
     let nodes = modify_html(html)?;

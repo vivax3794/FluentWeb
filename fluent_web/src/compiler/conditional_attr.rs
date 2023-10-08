@@ -37,7 +37,7 @@ fn compile_stmt(
 
 /// Compile conditional attribute
 pub fn compile(
-    html: kuchikiki::NodeRef,
+    html: &kuchikiki::NodeRef,
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<Vec<DefCallPair>> {
     let nodes = modify_html_code(html, "?")?;

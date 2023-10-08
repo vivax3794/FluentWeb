@@ -13,8 +13,7 @@ struct SubComponentData {
 }
 
 /// This finds <componet> tags, parses and stores its `src` and then replaces it with a <div>
-#[allow(clippy::needless_pass_by_value)]
-fn find_subcomponents(node: kuchikiki::NodeRef) -> CompilerResult<Vec<SubComponentData>> {
+fn find_subcomponents(node: &kuchikiki::NodeRef) -> CompilerResult<Vec<SubComponentData>> {
     use kuchikiki::NodeData;
     use markup5ever::namespace_url;
 
@@ -46,7 +45,7 @@ fn find_subcomponents(node: kuchikiki::NodeRef) -> CompilerResult<Vec<SubCompone
         }
         NodeData::Element(_) => Ok(node
             .children()
-            .map(find_subcomponents)
+            .map(|n| find_subcomponents(&n))
             .collect::<CompilerResult<Vec<_>>>()?
             .into_iter()
             .flatten()
@@ -61,17 +60,17 @@ fn compile_stmt(data: SubComponentData) -> DefCallPair {
 
     let selector = format!(".{}.__Fluent_Needs_Init", data.id);
     let function_def = quote!(
-        fn #function_name(&self, __Fluent_S: Option<&str>) {
+        fn #function_name(&mut self, __Fluent_S: Option<&str>) {
             use ::fluent_web_runtime::internal::Component;
             let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(self.root(), #selector, __Fluent_S);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 let __Fluent_Id = ::fluent_web_runtime::internal::uuid();
                 __Fluent_Element.set_id(&__Fluent_Id);
-                ::fluent_web_runtime::forget(::fluent_web_runtime::render_component!(#{data.component_name}, &*__Fluent_Id));
+                self.subs.insert(__Fluent_Id.clone(), ::fluent_web_runtime::render_component!(#{data.component_name}, &*__Fluent_Id));
             }
         }
     );
-    let function_call = quote!(comp.upgrade().unwrap().borrow().#function_name(root.clone()););
+    let function_call = quote!(self.#function_name(root.clone()););
 
     DefCallPair {
         def: function_def,
@@ -80,7 +79,27 @@ fn compile_stmt(data: SubComponentData) -> DefCallPair {
 }
 
 /// Compile subcomponents inits
-pub fn compile(html: kuchikiki::NodeRef) -> CompilerResult<Vec<DefCallPair>> {
+pub fn compile(html: &kuchikiki::NodeRef) -> CompilerResult<Vec<DefCallPair>> {
     let nodes = find_subcomponents(html)?;
     Ok(nodes.into_iter().map(compile_stmt).collect())
+}
+
+/// Convert a module path with generics into a compoent path
+///
+/// # Example
+/// `Test::App<u8>` -> `Test::App::Component<u8>`
+fn get_component_path(path: syn::Path) -> CompilerResult<proc_macro2::TokenStream> {
+    let mut segments = path.segments.into_iter();
+    let last = segments
+        .next_back()
+        .ok_or_else(|| Compiler::WrongSyntax("Invalid component path"))?;
+    let mut segments = segments.map(|p| quote!(#p)).collect::<Vec<_>>();
+
+    let syn::PathSegment {
+        ident, arguments, ..
+    } = last;
+    segments.push(quote!(#ident));
+
+    // WORKAROUND: template_quote does not support longer than 1 seperators
+    Ok(quote::quote!(#(#segments)::*::Component::#arguments))
 }

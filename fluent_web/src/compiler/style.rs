@@ -168,7 +168,7 @@ fn compile_css_vars(
 
 /// Compile css vars
 pub fn compile(
-    html: kuchikiki::NodeRef,
+    html: &kuchikiki::NodeRef,
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<Vec<DefCallPair>> {
     let nodes = modify_html(html, "--");

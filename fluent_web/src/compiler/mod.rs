@@ -6,6 +6,7 @@ mod custom_events;
 mod data_and_props;
 mod event_listen;
 mod generics;
+mod ifs;
 mod reactive_text;
 mod style;
 mod subcomponent;
@@ -142,20 +143,22 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
     let body_html = get_html_body(&source_content)?;
 
     let mut reactive_pairs = vec![];
-    reactive_pairs.extend(reactive_text::compile(body_html.clone(), &data)?);
-    reactive_pairs.extend(conditional_attr::compile(body_html.clone(), &data)?);
-    reactive_pairs.extend(computed_attribute::compile(body_html.clone(), &data)?);
-    reactive_pairs.extend(style::compile(body_html.clone(), &data)?);
+    reactive_pairs.extend(reactive_text::compile(&body_html, &data)?);
+    reactive_pairs.extend(conditional_attr::compile(&body_html, &data)?);
+    reactive_pairs.extend(computed_attribute::compile(&body_html, &data)?);
+    reactive_pairs.extend(style::compile(&body_html, &data)?);
+
+    let mut once_pairs = vec![];
+    once_pairs.extend(subcomponent::compile(&body_html)?);
+    once_pairs.extend(event_listen::compile(&body_html, &data)?);
+    //
+    // Important that this is last
+    reactive_pairs.extend(ifs::compile(&body_html, &data)?);
 
     let (reactive_defs, reactive_calls): (Vec<_>, Vec<_>) = reactive_pairs
         .into_iter()
         .map(|pair| (pair.def, pair.call))
         .unzip();
-
-    let mut once_pairs = vec![];
-    once_pairs.extend(subcomponent::compile(body_html.clone())?);
-    once_pairs.extend(event_listen::compile(body_html.clone(), &data)?);
-
     let (once_defs, once_calls): (Vec<_>, Vec<_>) = once_pairs
         .into_iter()
         .map(|pair| (pair.def, pair.call))
@@ -188,6 +191,8 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             root_name: Box<str>,
             data: __Fluid_Data #{&generics.ty_generics},
             updates: __Fluid_Reactive_Functions #{&generics.ty_generics},
+            subs: ::std::collections::HashMap<Box<str>, ::std::rc::Rc<dyn std::any::Any>>,
+            weak: ::std::option::Option<::fluent_web_runtime::internal::WeakRef<Component #{&generics.ty_generics}>>,
         }
 
         #{custom_events::compile_events(&source_content, &generics)?}
@@ -214,9 +219,12 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             fn root(&self) -> &str {
                 &self.root_name
             }
+            fn set_weak(&mut self, weak: ::fluent_web_runtime::internal::WeakRef<Self>) {
+                self.weak = Some(weak);
+            }
             #{data_and_props::compile_update_props(&prop_statements)}
 
-            fn setup_onetime(comp: ::fluent_web_runtime::internal::WeakRef<Self>, root: Option<&str>) {
+            fn setup_onetime(&mut self, root: Option<&str>) {
                 #(#once_calls)*
             }
 

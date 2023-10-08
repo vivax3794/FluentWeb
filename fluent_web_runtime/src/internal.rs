@@ -17,8 +17,9 @@ pub trait Component {
     fn render_init(&self) -> String;
     fn create(root_id: Box<str>) -> Self;
     fn root(&self) -> &str;
+    fn set_weak(&mut self, weak: WeakRef<Self>);
 
-    fn setup_onetime(component: WeakRef<Self>, root: Option<&str>);
+    fn setup_onetime(&mut self, root: Option<&str>);
     fn update_all(&mut self, root: Option<&str>);
     fn update_props(&mut self);
 }
@@ -34,6 +35,7 @@ fn setup_watcher<C: Component + 'static>(component: WeakRef<C>, root_name: &str)
     let function = wasm_bindgen::closure::Closure::<dyn Fn()>::new(function);
     let js_function = function.as_ref().unchecked_ref();
     let observer = web_sys::MutationObserver::new(js_function).unwrap();
+    // NOTE We are not planning to store this as props will be refactored to not use the JS boundry
     function.forget();
 
     let element = get_by_id(root_name);
@@ -41,6 +43,49 @@ fn setup_watcher<C: Component + 'static>(component: WeakRef<C>, root_name: &str)
     let mut options = web_sys::MutationObserverInit::new();
     options.attributes(true);
     observer.observe_with_options(&element, &options).unwrap();
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub fn do_if<C: Component>(
+    node_id: &str,
+    true_case: &str,
+    condition: bool,
+    parent_id: Option<&str>,
+    comp: &mut C,
+) {
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+
+    let elements = get_elements(comp.root(), &format!(".{node_id}"), parent_id);
+    for element in elements {
+        let current_state = element
+            .get_attribute("__Fluent_If")
+            .unwrap_or_else(|| "false".to_owned());
+
+        let new_element = match (condition, &*current_state) {
+            (true, "false") => {
+                let new_element = document.create_element("div").unwrap();
+                new_element.set_inner_html(true_case);
+                let new_element = new_element.first_child().unwrap();
+                let new_element = new_element.dyn_into::<web_sys::Element>().unwrap();
+                new_element.set_attribute("__Fluent_If", "true").unwrap();
+                new_element
+            }
+            (false, "true") => {
+                let new_element = document.create_element("div").unwrap();
+                new_element.set_attribute("__Fluent_If", "false").unwrap();
+                new_element.class_list().add_1(node_id).unwrap();
+                new_element
+            }
+            _ => element.clone(),
+        };
+
+        element.replace_with_with_node_1(&new_element).unwrap();
+        if condition && current_state == "false" {
+            comp.update_all(Some(node_id));
+            comp.setup_onetime(Some(node_id));
+        }
+    }
 }
 
 #[must_use = "This is the only strong reference to this component, if this is dropped then nothing will work. consider using `fluent_web_runtime::forget` to leak its memory and keep it alive until the end of the program."]
@@ -59,14 +104,15 @@ pub fn render_component<C: Component + 'static>(mount_point: impl Into<Box<str>>
         .remove_1("__Fluent_Needs_Init")
         .unwrap();
 
-    let mut component = C::create(mount_point);
+    let component = C::create(mount_point);
     element.set_inner_html(&component.render_init());
-    component.update_all(None);
 
     let component = Rc::new(RefCell::new(component));
+    component.borrow_mut().set_weak(Rc::downgrade(&component));
 
+    component.borrow_mut().update_all(None);
     setup_watcher(Rc::downgrade(&component), component.borrow().root());
-    C::setup_onetime(Rc::downgrade(&component), None);
+    component.borrow_mut().setup_onetime(None);
 
     component
 }
@@ -104,7 +150,7 @@ pub fn get_elements(
     let selector = ::std::format!(
         "#{} {} {}:not(#{} .__Fluent_Component *)",
         component_id,
-        root_selector.unwrap_or_default(),
+        root_selector.map(|s| format!(".{s}")).unwrap_or_default(),
         selector,
         component_id
     );
@@ -135,7 +181,6 @@ impl<T> DomDisplay for T
 where
     T: Debug,
 {
-    #[inline(always)]
     default fn dom_display(&self) -> String {
         format!("{:?}", self)
     }
@@ -180,7 +225,7 @@ impl<T> ChangeDetector<T> {
     }
 
     #[must_use]
-    pub fn was_written(&self) -> bool {
+    pub const fn was_written(&self) -> bool {
         self.write
     }
 
@@ -190,7 +235,7 @@ impl<T> ChangeDetector<T> {
     }
 
     #[must_use]
-    pub fn borrow(&self) -> ChangeDetectorRead<T> {
+    pub const fn borrow(&self) -> ChangeDetectorRead<T> {
         ChangeDetectorRead {
             value: &self.value,
             read: &self.read,

@@ -1,5 +1,7 @@
 //! <data> and <props> sections
 
+use quote::ToTokens;
+
 use crate::prelude::*;
 
 /// A statement in the <data> block
@@ -20,7 +22,7 @@ pub fn parse_data_and_props_segement(
     data_section: &str,
     is_prop: bool,
 ) -> CompilerResult<Vec<DataStatement>> {
-    let data_block_parsed: syn::Block = syn::parse_str(&format!("{{{data_section}}}"))?;
+    let data_block_parsed: syn::Block = syn::parse_str(&format!("{{\n{data_section}\n}}"))?;
 
     data_block_parsed
         .stmts
@@ -54,9 +56,14 @@ pub fn parse_data_and_props_segement(
                 init_value: expr,
                 is_prop,
             }),
-            _ => Err(Compiler::WrongSyntax(
-                "expected let mut NAME: TYPE = VALUE;",
-            )),
+            stmt => Err(Compiler::WrongSyntaxInDataSection {
+                src: data_section.to_owned(),
+                err_span: procmacro_tokens_to_mietti_span(
+                    data_section,
+                    stmt.into_token_stream(),
+                    1,
+                ),
+            }),
         })
         .collect()
 }
@@ -137,6 +144,8 @@ pub fn compile_create(data: &[DataStatement]) -> proc_macro2::TokenStream {
                     _p: std::marker::PhantomData,
                 },
                 updates: __Fluid_Reactive_Functions::default(),
+                subs: ::std::collections::HashMap::new(),
+                weak: std::option::Option::None,
             }
         }
     )

@@ -1,7 +1,13 @@
 <template>
-    <input id="BUTTON" types="checkbox" :click="|_, element| *value = element.checked()"></input>
+    <input id="BUTTON" type="checkbox" :click="|_, element| *value = element.checked()"></input>
     <div $if="*value" id="SIMPLE">
         Hello World!
+    </div>
+    <div $if="*value" id="REACTIVE">
+        {value}
+    </div>
+    <div $if="*value" id="SUB">
+        <component src="super::Sub"></component>
     </div>
 </template>
 

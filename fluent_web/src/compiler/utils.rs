@@ -1,4 +1,4 @@
-//! Common util methods
+//! Common utel methods
 
 use crate::error::{Compiler, CompilerResult};
 
@@ -73,11 +73,31 @@ pub fn extract_format_strings(text: &str) -> CompilerResult<(String, Vec<syn::Ex
     Ok((format_string, expressions))
 }
 
+/// Visit every node and maybe modify its data and return a Vector of results
+pub fn visit_html_nodes<T, F>(node: &kuchikiki::NodeRef, mut func: F) -> Vec<T>
+where
+    F: FnMut(&kuchikiki::NodeRef) -> Vec<T>,
+    F: Clone,
+{
+    use kuchikiki::NodeData;
+
+    // REALLY IMPORTANT: because of the if thing this NEEDS to be called first ...
+    let mut this_element = func(node);
+    this_element.extend(match node.data() {
+        NodeData::Element(_) => node
+            .children()
+            .flat_map(|x| visit_html_nodes(&x, func.clone()))
+            .collect(),
+        _ => vec![],
+    });
+    this_element
+}
+
 /// Info about the modified html
 pub struct ModifiedHtmlInfo {
     /// Id of the element
     pub id: String,
-    /// The attribute (without prefixc)
+    /// The attribute (without prefix)
     pub attribute: String,
     /// The attribute value
     pub value: String,
@@ -88,53 +108,51 @@ pub struct ModifiedHtmlInfo {
 }
 
 /// Find conditional attributes
-#[allow(clippy::needless_pass_by_value)]
-pub fn modify_html(node: kuchikiki::NodeRef, prefix: &str) -> Vec<ModifiedHtmlInfo> {
-    use kuchikiki::NodeData;
-    match node.data() {
-        NodeData::Element(data) => {
-            let mut attributes = data.attributes.borrow_mut();
-            let prefixed_attributes = attributes
-                .map
-                .iter()
-                .filter(|&(name, _)| name.local.starts_with(prefix))
-                .map(|(name, content)| (name.local.to_string(), content.value.clone()))
-                .collect::<Vec<_>>();
+pub fn modify_html(node: &kuchikiki::NodeRef, prefix: &str) -> Vec<ModifiedHtmlInfo> {
+    visit_html_nodes(node, |node: &kuchikiki::NodeRef| {
+        use kuchikiki::NodeData;
+        match node.data() {
+            NodeData::Element(data) => {
+                let mut attributes = data.attributes.borrow_mut();
+                let prefixed_attributes = attributes
+                    .map
+                    .iter()
+                    .filter(|&(name, _)| name.local.starts_with(prefix))
+                    .map(|(name, content)| (name.local.to_string(), content.value.clone()))
+                    .collect::<Vec<_>>();
 
-            let mut this_element = if prefixed_attributes.is_empty() {
-                vec![]
-            } else {
-                let id = uuid();
-                add_class(&mut attributes, &id);
+                if prefixed_attributes.is_empty() {
+                    vec![]
+                } else {
+                    let id = uuid();
+                    add_class(&mut attributes, &id);
 
-                prefixed_attributes
-                    .into_iter()
-                    .map(|(name, value)| {
-                        attributes.remove(name.clone());
+                    prefixed_attributes
+                        .into_iter()
+                        .map(|(name, value)| {
+                            attributes.remove(name.clone());
 
-                        // The filter has made sure this is safe
-                        #[allow(clippy::expect_used)]
-                        let name = name
-                            .strip_prefix(prefix)
-                            .expect("Name to start with ?")
-                            .to_owned();
+                            // The filter has made sure this is safe
+                            #[allow(clippy::expect_used)]
+                            let name = name
+                                .strip_prefix(prefix)
+                                .expect("Name to start with ?")
+                                .to_owned();
 
-                        ModifiedHtmlInfo {
-                            id: id.clone(),
-                            attribute: name,
-                            value,
-                            element: data.name.local.to_string(),
-                            src: attributes.get("src").map(std::borrow::ToOwned::to_owned),
-                        }
-                    })
-                    .collect()
-            };
-
-            this_element.extend(node.children().flat_map(|x| modify_html(x, prefix)));
-            this_element
+                            ModifiedHtmlInfo {
+                                id: id.clone(),
+                                attribute: name,
+                                value,
+                                element: data.name.local.to_string(),
+                                src: attributes.get("src").map(std::borrow::ToOwned::to_owned),
+                            }
+                        })
+                        .collect()
+                }
+            }
+            _ => vec![],
         }
-        _ => vec![],
-    }
+    })
 }
 
 /// Same as `ModifiedHtmlInfo` but with a parsed code object
@@ -175,7 +193,7 @@ impl GetSrc for proc_macro2::TokenStream {
 /// Same as `modify_html` but parses the attribute value into a `syn` ast node.
 #[must_use = "No reason to use this instead of `modify_html` if you dont use the result"]
 pub fn modify_html_code<T: syn::parse::Parse, S: GetSrc>(
-    html: kuchikiki::NodeRef,
+    html: &kuchikiki::NodeRef,
     prefix: &str,
 ) -> CompilerResult<Vec<ModifiedHtmlInfoWithCode<T, S>>> {
     modify_html(html, prefix)

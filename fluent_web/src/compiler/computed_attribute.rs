@@ -1,7 +1,5 @@
 //! =abc and @abd
 
-// TODO: Combine `modify_html` functions
-
 use super::utils::{modify_html_code, uuid, ModifiedHtmlInfoWithCode};
 use super::DefCallPair;
 use crate::prelude::*;
@@ -40,8 +38,9 @@ fn compile_stmt(
             #{&data.unpack_ref}
 
             let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(&self.root_name, #selector, __Fluent_S);
+            let __Fluent_Value = #attribute_value;
             for __Fluent_Element in __Fluent_Elements.into_iter() {
-                __Fluent_Element.set_attribute(#{&attribute.attribute}, #attribute_value).unwrap();
+                __Fluent_Element.set_attribute(#{&attribute.attribute}, __Fluent_Value).unwrap();
             }
 
             self.detect_reads(Component::#function_name);
@@ -57,10 +56,10 @@ fn compile_stmt(
 
 /// Compiler normal and prop computed attributes
 pub fn compile(
-    html: kuchikiki::NodeRef,
+    html: &kuchikiki::NodeRef,
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<Vec<DefCallPair>> {
-    let normal_nodes = modify_html_code(html.clone(), "=")?;
+    let normal_nodes = modify_html_code(html, "=")?;
     let prop_nodes = modify_html_code(html, "@")?;
 
     let normal = normal_nodes

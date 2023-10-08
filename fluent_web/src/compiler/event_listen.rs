@@ -60,18 +60,18 @@ fn compile_native_listener(
             self.update_changed_values();
         }
 
-        fn #function_name(comp: ::fluent_web_runtime::internal::WeakRef<Self>, __Fluent_S: Option<&str>) {
+        fn #function_name(&mut self, __Fluent_S: Option<&str>) {
             use ::fluent_web_runtime::internal::Component;
-            let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(comp.upgrade().unwrap().borrow().root(), #selector, __Fluent_S);
+            let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(self.root(), #selector, __Fluent_S);
 
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
 
                 let __Fluent_Element_Typed = __Fluent_Element.dyn_ref::<::fluent_web_runtime::internal::web_sys::#element_type>().unwrap().to_owned();
 
-                let comp_clone = comp.clone();
+                let comp = self.weak.clone().unwrap();
                 let __Fluent_Function = ::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_runtime::internal::web_sys::Event| {
-                    comp_clone.upgrade().unwrap().borrow_mut().#function_name_internal(event, &__Fluent_Element_Typed);
+                    comp.upgrade().unwrap().borrow_mut().#function_name_internal(event, &__Fluent_Element_Typed);
                 });
 
                 __Fluent_Element.add_event_listener_with_callback(#{&event.attribute}, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
@@ -80,7 +80,7 @@ fn compile_native_listener(
         }
     );
 
-    let call = quote!(Self::#function_name(comp.clone(), root.clone()););
+    let call = quote!(self.#function_name(root.clone()););
 
     Ok(DefCallPair {
         def: set_event_handler,
@@ -98,8 +98,7 @@ fn compile_custom_listener(
 
     let event_reading = {
         let component_path: syn::Path = syn::parse2(event.src.clone())?;
-        let mut segments: syn::punctuated::IntoIter<syn::PathSegment> =
-            component_path.segments.into_iter();
+        let mut segments = component_path.segments.into_iter();
         let last = segments
             .next_back()
             .ok_or_else(|| Compiler::WrongSyntax("Invalid component path"))?;
@@ -111,7 +110,8 @@ fn compile_custom_listener(
         segments.push(quote!(#ident));
 
         let event_name = quote::format_ident!("{}", event.attribute);
-        // template_quote does not support longer than 1 seperators
+        // WORKAROUND: template_quote does not support longer than 1 seperators
+
         let segments_combined = quote::quote!(#(#segments)::*);
         let event_type = quote!(
             <#segments_combined ::__Fluent_Events:: #event_name #arguments
@@ -154,18 +154,18 @@ fn compile_custom_listener(
             self.update_changed_values();
         }
 
-        fn #function_name(comp: ::fluent_web_runtime::internal::WeakRef<Self>, __Fluent_S: Option<&str>) {
+        fn #function_name(&mut self, __Fluent_S: Option<&str>) {
             use ::fluent_web_runtime::internal::Component;
             let __Fluent_Elements =
                 ::fluent_web_runtime::internal
-                ::get_elements(comp.upgrade().unwrap().borrow().root(), #selector, __Fluent_S);
+                ::get_elements(self.root(), #selector, __Fluent_S);
 
             for __Fluent_Element in __Fluent_Elements.into_iter() {
                 use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
 
-                let comp_clone = comp.clone();
+                let comp = self.weak.clone().unwrap();
                 let __Fluent_Function = ::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(_)>::new(move |event: ::fluent_web_runtime::internal::web_sys::Event| {
-                    comp_clone.upgrade().unwrap().borrow_mut().#function_name_internal(event);
+                    comp.upgrade().unwrap().borrow_mut().#function_name_internal(event);
                 });
 
                 __Fluent_Element.add_event_listener_with_callback(#{&event.attribute}, __Fluent_Function.as_ref().unchecked_ref()).unwrap();
@@ -174,7 +174,7 @@ fn compile_custom_listener(
         }
     );
 
-    let call = quote!(Self::#function_name(comp.clone(), root.clone()););
+    let call = quote!(self.#function_name(root.clone()););
 
     Ok(DefCallPair {
         def: set_event_handler,
@@ -184,10 +184,10 @@ fn compile_custom_listener(
 
 /// Compiler custom and native events
 pub fn compile(
-    html: kuchikiki::NodeRef,
+    html: &kuchikiki::NodeRef,
     data: &super::data_and_props::Unwraps,
 ) -> CompilerResult<Vec<DefCallPair>> {
-    let native_nodes = modify_html_code(html.clone(), ":")?;
+    let native_nodes = modify_html_code(html, ":")?;
     let custom_nodes = modify_html_code(html, ";")?;
 
     let native = native_nodes
