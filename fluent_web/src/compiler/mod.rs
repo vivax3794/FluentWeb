@@ -209,7 +209,7 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             }
         }
 
-        impl #{generics.impl_generics} ::fluent_web_runtime::internal::Component for Component #{&generics.ty_generics} #{generics.where_clauses} {
+        impl #{&generics.impl_generics} ::fluent_web_runtime::internal::Component for Component #{&generics.ty_generics} #{&generics.where_clauses} {
             fn render_init(&self) -> ::std::string::String {
                 let root = &self.root_name;
                 ::std::format!(#html_content)
@@ -231,6 +231,12 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             fn update_all(&mut self, root: Option<&str>) {
                 self.update_props();
                 #(#reactive_calls)*
+            }
+        }
+
+        impl #{&generics.impl_generics} Drop for Component #{&generics.ty_generics} {
+            fn drop(&mut self) {
+                ::fluent_web_runtime::internal::log("Droped component");
             }
         }
     );
