@@ -181,6 +181,10 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
         use ::fluent_web_runtime::internal::web_sys::*;
         use ::fluent_web_runtime::internal::DomDisplay;
         use ::fluent_web_runtime::internal::UseInEvent;
+        use ::fluent_web_runtime::internal::Component as __Fluent_Comp_Trait;
+        use ::fluent_web_runtime::CompRef;
+
+        #{ data_and_props::compile_unwrap_macro(&data_statements) }
 
         #define_parsed
 
@@ -202,10 +206,12 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             #(#once_defs)*
 
             #{data_and_props::compile_detect_reads(&data_statements, &generics, &data)}
-            #{data_and_props::compile_update_changed_values(&data_statements, &generics, &data)}
 
             fn emit<E: ::fluent_web_runtime::internal::Event>(&self, event: &E) {
                 ::fluent_web_runtime::internal::emit(&self.root_name, event);
+            }
+            fn weak(&self) -> ::fluent_web_runtime::internal::WeakRef<Self> {
+                self.weak.clone().unwrap()
             }
         }
 
@@ -216,12 +222,15 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             }
 
             #{data_and_props::compile_create(&data_statements)}
+
             fn root(&self) -> &str {
                 &self.root_name
             }
             fn set_weak(&mut self, weak: ::fluent_web_runtime::internal::WeakRef<Self>) {
                 self.weak = Some(weak);
             }
+
+            #{data_and_props::compile_update_changed_values(&data_statements, &generics, &data)}
             #{data_and_props::compile_update_props(&prop_statements)}
 
             fn setup_onetime(&mut self, root: Option<&str>) {

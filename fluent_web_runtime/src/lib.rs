@@ -67,3 +67,42 @@ macro_rules! render_component {
 pub const fn forget<C: internal::Component>(comp: internal::Wrapped<C>) {
     std::mem::forget(comp);
 }
+
+/// Reference to a component
+pub type CompRef<T> = internal::WeakRef<T>;
+
+/// Repeat a function every time.
+///
+/// # Panics
+/// If js envrioment is corrupted
+#[allow(clippy::unwrap_used)]
+pub fn internal<F: Fn() + 'static>(func: F, time_ms: i32) {
+    use wasm_bindgen::JsCast;
+
+    let function = wasm_bindgen::closure::Closure::<dyn Fn()>::new(func);
+    let js_function = function.as_ref().unchecked_ref();
+
+    let window = web_sys::window().unwrap();
+    window
+        .set_interval_with_callback_and_timeout_and_arguments_0(js_function, time_ms)
+        .unwrap();
+    function.forget();
+}
+
+/// Repeat a function in time.
+///
+/// # Panics
+/// If js envrioment is corrupted
+#[allow(clippy::unwrap_used)]
+pub fn after<F: Fn() + 'static>(func: F, time_ms: i32) {
+    use wasm_bindgen::JsCast;
+
+    let function = wasm_bindgen::closure::Closure::<dyn Fn()>::new(func);
+    let js_function = function.as_ref().unchecked_ref();
+
+    let window = web_sys::window().unwrap();
+    window
+        .set_timeout_with_callback_and_timeout_and_arguments_0(js_function, time_ms)
+        .unwrap();
+    function.forget();
+}

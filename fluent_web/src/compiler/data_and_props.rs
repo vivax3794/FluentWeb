@@ -116,6 +116,22 @@ pub fn compile_unwraps(data_statements: &[DataStatement]) -> Unwraps {
     }
 }
 
+/// Create a macro to unpack a ident as the current component
+pub fn compile_unwrap_macro(data_statements: &[DataStatement]) -> proc_macro2::TokenStream {
+    quote!(
+        macro_rules! unpack {
+            ($component:expr, $($field:ident),*) => {
+                // Drop order is very important
+                let __Fluid_Ref = ::fluent_web_runtime::internal::CompRefHolder($component.clone());
+                let mut __Fluid_Comp = $component.upgrade().unwrap();
+                let mut __Fluid_Comp = __Fluid_Comp.borrow_mut();
+                let __Fluid_Data { $(ref mut $field,)* .. } = __Fluid_Comp.data;
+                $(let mut $field = $field.borrow_mut();)*
+            };
+        }
+    )
+}
+
 /// Compile definition for data struct
 pub fn compile_data_struct(
     data: &[DataStatement],

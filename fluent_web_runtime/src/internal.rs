@@ -22,6 +22,7 @@ pub trait Component {
     fn setup_onetime(&mut self, root: Option<&str>);
     fn update_all(&mut self, root: Option<&str>);
     fn update_props(&mut self);
+    fn update_changed_values(&mut self);
 }
 
 fn setup_watcher<C: Component + 'static>(component: WeakRef<C>, root_name: &str) {
@@ -329,4 +330,16 @@ pub fn emit<E: Event>(root_name: &str, event: &E) {
     )
     .unwrap();
     root_element.dispatch_event(&event).unwrap();
+}
+
+#[derive(Debug)]
+pub struct CompRefHolder<T: Component>(pub WeakRef<T>);
+
+impl<T: Component> Drop for CompRefHolder<T> {
+    fn drop(&mut self) {
+        log("Dropping held reference!");
+        let comp = self.0.upgrade().unwrap();
+        let mut comp = comp.borrow_mut();
+        comp.update_changed_values();
+    }
 }
