@@ -88,6 +88,7 @@ impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
 
         let segements = segements
             .into_iter()
+            .rev()
             .flat_map(|(mut components, combinator)| {
                 if let Some(comb) = combinator {
                     components.insert(0, lightningcss::selector::Component::Combinator(comb));
