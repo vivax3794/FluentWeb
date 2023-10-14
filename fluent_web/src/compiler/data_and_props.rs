@@ -222,7 +222,7 @@ pub fn compile_detect_reads(
             #{&unwraps.unpack_change_detector}
             #(for field in data) {
                 if #{&field.target}.was_read() {
-                    self.updates.#{&field.target}.insert((f, false));
+                    self.updates.#{&field.target}.insert((f, true));
                     #{&field.target}.clear();
                 }
             }
@@ -231,7 +231,7 @@ pub fn compile_detect_reads(
             #{&unwraps.unpack_change_detector}
             #(for field in data) {
                 if #{&field.target}.was_read() {
-                    self.updates.#{&field.target}.insert((f, true));
+                    self.updates.#{&field.target}.insert((f, false));
                     #{&field.target}.clear();
                 }
             }
