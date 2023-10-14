@@ -38,8 +38,8 @@ fn compile_stmt(
             #{&data.unpack_ref}
 
             let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(&self.root_name, #selector, __Fluent_S);
-            let __Fluent_Value = #attribute_value;
             for __Fluent_Element in __Fluent_Elements.into_iter() {
+                let __Fluent_Value = #attribute_value;
                 __Fluent_Element.set_attribute(#{&attribute.attribute}, __Fluent_Value).unwrap();
             }
 

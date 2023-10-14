@@ -18,8 +18,8 @@ fn compile_stmt(
 
             let __Fluent_Elements = ::fluent_web_runtime::internal::get_elements(&self.root_name, #selector, __Fluent_S);
             for __Fluent_Element in __Fluent_Elements.into_iter() {
-                if #{&attribute.code} {
-                    __Fluent_Element.set_attribute(#{&attribute.attribute}, "").unwrap();
+                if let Some(val) = #{&attribute.code} {
+                    __Fluent_Element.set_attribute(#{&attribute.attribute}, val).unwrap();
                 } else {
                     __Fluent_Element.remove_attribute(#{&attribute.attribute}).unwrap();
                 }

@@ -1,7 +1,7 @@
 <template>
     <input id="CHECK" type="checkbox" :click="|event, element| *value = element.checked()">
 
-    <p id="A" ?hidden="*value">Conditional Attribute</p>
+    <p id="A" ?hidden='value.then_some("")'>Conditional Attribute</p>
     <p id="B" =val="*value">Computed Attribute</p>
     
     <component src="super::Sub" @val="*value"></component>
