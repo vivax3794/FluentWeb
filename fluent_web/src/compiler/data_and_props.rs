@@ -122,11 +122,18 @@ pub fn compile_unwrap_macro(data_statements: &[DataStatement]) -> proc_macro2::T
         macro_rules! unpack {
             ($component:expr, $($field:ident),*) => {
                 // Drop order is very important
-                let __Fluid_Ref = ::fluent_web_runtime::internal::CompRefHolder($component.clone());
-                let mut __Fluid_Comp = $component.upgrade().unwrap();
+                let mut __Fluid_Comp = $component.clone().upgrade().unwrap();
                 let mut __Fluid_Comp = __Fluid_Comp.borrow_mut();
                 let __Fluid_Data { $(ref mut $field,)* .. } = __Fluid_Comp.data;
                 $(let mut $field = $field.borrow_mut();)*
+            };
+        }
+        macro_rules! update {
+            ($component:expr) => {
+                // Drop order is very important
+                let mut __Fluid_Comp = $component.clone().upgrade().unwrap();
+                let mut __Fluid_Comp = __Fluid_Comp.borrow_mut();
+                __Fluid_Comp.update_changed_values();
             };
         }
     )

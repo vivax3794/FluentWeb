@@ -333,15 +333,3 @@ pub fn emit<E: Event>(root_name: &str, event: &E) {
     .unwrap();
     root_element.dispatch_event(&event).unwrap();
 }
-
-#[derive(Debug)]
-pub struct CompRefHolder<T: Component>(pub WeakRef<T>);
-
-impl<T: Component> Drop for CompRefHolder<T> {
-    fn drop(&mut self) {
-        log("Dropping held reference!");
-        let comp = self.0.upgrade().unwrap();
-        let mut comp = comp.borrow_mut();
-        comp.update_changed_values();
-    }
-}

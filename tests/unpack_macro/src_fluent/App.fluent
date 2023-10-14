@@ -10,9 +10,11 @@
 use fluent_web_runtime::after;
 
 fn change(comp: CompRef<Component>) {
-    unpack!(comp, value);
-
-    *value = 10;
+    {
+        unpack!(comp, value);
+        *value = 10;
+    }
+    update!(comp);
 }
 </define>
 
