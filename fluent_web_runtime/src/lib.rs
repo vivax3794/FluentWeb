@@ -76,7 +76,7 @@ pub type CompRef<T> = internal::WeakRef<T>;
 /// # Panics
 /// If js envrioment is corrupted
 #[allow(clippy::unwrap_used)]
-pub fn internal<F: Fn() + 'static>(func: F, time_ms: i32) {
+pub fn interval<F: Fn() + 'static>(func: F, time_ms: i32) {
     use wasm_bindgen::JsCast;
 
     let function = wasm_bindgen::closure::Closure::<dyn Fn()>::new(func);
