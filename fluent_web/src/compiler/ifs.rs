@@ -120,7 +120,7 @@ fn compile_stmt(stmt: &IfInfo, data: &super::data_and_props::Unwraps) -> DefCall
                         parent_id,
                         self,
                 );
-                self.detect_reads(Self::#function_name);
+                self.detect_reads_ifs(Self::#function_name);
             }
         ),
         call: quote!(self.#function_name(root.clone());),
