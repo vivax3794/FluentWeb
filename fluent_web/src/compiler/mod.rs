@@ -139,6 +139,8 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
 
     let define_parsed: syn::File =
         syn::parse_str(find_top_level_tag(&source_content, "define").unwrap_or(""))?;
+    let setup_parsed: syn::File =
+        syn::parse_str(find_top_level_tag(&source_content, "setup").unwrap_or(""))?;
 
     let body_html = get_html_body(&source_content)?;
 
@@ -240,6 +242,11 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             fn update_all(&mut self, root: Option<&str>) {
                 self.update_props();
                 #(#reactive_calls)*
+            }
+
+            fn setup(&mut self) {
+                #setup_parsed
+                self.update_changed_values();
             }
         }
 
