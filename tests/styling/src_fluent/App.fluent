@@ -5,6 +5,7 @@
     <button id="C" :click="|_, _| *c += 1" --color="rgba({*c}, 0, 0, 1)">Dynamic</button>
 
     <h1 id="D1">Scoped rules</h1>
+    <div id="F"><h2 id="FC">Test</h2></div>
     <component src="super::Sub" --color="rgba(255, 0, 0, 1)"></component>
 </template>
 
@@ -26,5 +27,9 @@ let mut c: u8 = 0;
 
 h1 {
     color: rgba(0, 0, 255, 1);
+}
+
+#F > h2 {
+    color: rgba(255, 0, 0, 1);
 }
 </style>

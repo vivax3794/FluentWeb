@@ -91,14 +91,17 @@ impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
             .rev()
             .flat_map(|(mut components, combinator)| {
                 if let Some(comb) = combinator {
-                    components.insert(0, lightningcss::selector::Component::Combinator(comb));
+                    components.push(lightningcss::selector::Component::Combinator(comb));
                     components
                 } else {
                     components
                 }
             })
             .collect::<Vec<_>>();
+
+        dbg!(&segements);
         let new_selector: lightningcss::selector::Selector = segements.into();
+        dbg!(&new_selector);
         *selector = new_selector;
 
         Ok(())
