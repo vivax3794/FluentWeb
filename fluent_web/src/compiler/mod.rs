@@ -139,8 +139,10 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
 
     let define_parsed: syn::File =
         syn::parse_str(find_top_level_tag(&source_content, "define").unwrap_or(""))?;
-    let setup_parsed: syn::File =
-        syn::parse_str(find_top_level_tag(&source_content, "setup").unwrap_or(""))?;
+    let setup_parsed: syn::Expr = syn::parse_str(&format!(
+        "{{{}}}",
+        find_top_level_tag(&source_content, "setup").unwrap_or("")
+    ))?;
 
     let body_html = get_html_body(&source_content)?;
 
