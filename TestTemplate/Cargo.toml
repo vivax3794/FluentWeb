@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 fluent_web_runtime = { path = "../fluent_web_runtime" }
 console_error_panic_hook = "*"
+
+[workspace]
