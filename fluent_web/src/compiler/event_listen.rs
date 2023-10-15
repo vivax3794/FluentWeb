@@ -13,12 +13,17 @@ fn compile_native_listener(
     let function_name_internal = quote::format_ident!("{}_internal", function_name);
 
     let mut c = event.element.chars();
-    let element_name_cap = c
+    let mut element_name_cap = c
         .next()
         .ok_or_else(|| Compiler::WrongSyntax("Event handler cant be empty name"))?
         .to_ascii_uppercase()
         .to_string()
         + c.as_str();
+
+    if element_name_cap == "A" {
+        element_name_cap = String::from("Anchor");
+    }
+
     let element_type = quote::format_ident!("Html{}Element", element_name_cap);
 
     let event_reading = {
