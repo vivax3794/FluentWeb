@@ -201,6 +201,8 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             updates: __Fluid_Reactive_Functions #{&generics.ty_generics},
             subs: ::std::collections::HashMap<Box<str>, ::std::rc::Rc<dyn std::any::Any>>,
             weak: ::std::option::Option<::fluent_web_runtime::internal::WeakRef<Component #{&generics.ty_generics}>>,
+            obs: Option<::fluent_web_runtime::internal::web_sys::MutationObserver>,
+            _f:  Option<::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(Vec<::fluent_web_runtime::internal::web_sys::MutationRecord>)>>
         }
 
         #{custom_events::compile_events(&source_content, &generics)?}
@@ -220,6 +222,56 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
         }
 
         impl #{&generics.impl_generics} ::fluent_web_runtime::internal::Component for Component #{&generics.ty_generics} #{&generics.where_clauses} {
+            fn setup_watcher(&mut self) {
+                use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
+
+                let component = self.weak();
+                let function = move |mutations: Vec<::fluent_web_runtime::internal::web_sys::MutationRecord>| {
+                   ::fluent_web_runtime::internal::log(&format!("CHECKING DROPPED STUFF"));
+                    if let Some(comp) = component.clone().upgrade() {
+                       let mut comp = comp.borrow_mut();
+                       for mutation in mutations.into_iter() {
+                           let nodes = mutation.removed_nodes();
+                           for i in 0..nodes.length() {
+                               let node = nodes.get(i).unwrap();
+                               if let Some(element) = node.dyn_ref::<::fluent_web_runtime::internal::web_sys::Element>() {
+                                   let mut stack = vec![element.clone()];
+                                   while let Some(element) = stack.pop() {
+                                       if let Some(id) = element.get_attribute("id") {
+                                           ::fluent_web_runtime::internal::log(&format!("{id:?}"));
+                                           let sub = comp.subs.remove(&*id);
+                                           ::fluent_web_runtime::internal::log(&format!("DROPPING: {}", sub.is_some()));
+                                           if let Some(sub) = sub {
+                                               ::fluent_web_runtime::internal::log(&format!("REFERENCES: {}", ::std::rc::Rc::strong_count(&sub)));
+                                               drop(sub);
+                                           }
+                                       }
+                                       let children = element.children();
+                                       for j in 0..children.length() {
+                                           stack.push(children.item(j).unwrap());
+                                       }
+                                   }
+                               }
+                           }
+                       }
+                    }
+                   ::fluent_web_runtime::internal::log(&format!("DONE CHECKING"));
+                };
+                let function = ::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(Vec<::fluent_web_runtime::internal::web_sys::MutationRecord>)>::new(function);
+                let js_function = function.as_ref().unchecked_ref();
+                let observer = ::fluent_web_runtime::internal::web_sys::MutationObserver::new(js_function).unwrap();
+
+                let element = ::fluent_web_runtime::internal::get_by_id(self.root());
+
+                let mut options = ::fluent_web_runtime::internal::web_sys::MutationObserverInit::new();
+                options.child_list(true);
+                options.subtree(true);
+                observer.observe_with_options(&element, &options).unwrap();
+
+                self.obs = Some(observer);
+                self._f = Some(function);
+            }
+
             fn render_init(&self) -> ::std::string::String {
                 let root = &self.root_name;
                 ::std::format!(#html_content)
@@ -256,6 +308,10 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
         impl #{&generics.impl_generics} Drop for Component #{&generics.ty_generics} {
             fn drop(&mut self) {
                 ::fluent_web_runtime::internal::log("Droped component");
+                if let Some(obs) = self.obs.take() {
+                    obs.disconnect();
+                    drop(obs);
+                }
             }
         }
     );

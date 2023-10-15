@@ -24,6 +24,7 @@ pub trait Component {
     fn update_props(&mut self);
     fn update_changed_values(&mut self);
     fn setup(&mut self);
+    fn setup_watcher(&mut self);
 }
 
 fn setup_watcher<C: Component + 'static>(component: WeakRef<C>, root_name: &str) {
@@ -118,6 +119,7 @@ pub fn render_component<C: Component + 'static>(mount_point: impl Into<Box<str>>
     setup_watcher(Rc::downgrade(&component), component.borrow().root());
     component.borrow_mut().setup_onetime(None);
     component.borrow_mut().setup();
+    component.borrow_mut().setup_watcher();
 
     component
 }

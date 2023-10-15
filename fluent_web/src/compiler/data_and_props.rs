@@ -169,6 +169,8 @@ pub fn compile_create(data: &[DataStatement]) -> proc_macro2::TokenStream {
                 updates: __Fluid_Reactive_Functions::default(),
                 subs: ::std::collections::HashMap::new(),
                 weak: std::option::Option::None,
+                obs: None,
+                _f: None,
             }
         }
     )
