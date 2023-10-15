@@ -1,4 +1,5 @@
 */dist/
 target
 .vscode
-TEST_FOLDER
+TEST_FOLDER/*
+!TEST_FOLDER/Cargo.toml
