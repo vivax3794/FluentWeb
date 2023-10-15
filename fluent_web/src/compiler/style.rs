@@ -99,9 +99,7 @@ impl<'i> lightningcss::visitor::Visitor<'i> for CssTransformer {
             })
             .collect::<Vec<_>>();
 
-        dbg!(&segements);
         let new_selector: lightningcss::selector::Selector = segements.into();
-        dbg!(&new_selector);
         *selector = new_selector;
 
         Ok(())

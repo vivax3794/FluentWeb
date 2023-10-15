@@ -247,6 +247,7 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             }
 
             fn setup(&mut self) {
+                #{&data.unpack_mut}
                 #setup_parsed
                 self.update_changed_values();
             }
