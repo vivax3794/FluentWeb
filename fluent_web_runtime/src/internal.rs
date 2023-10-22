@@ -93,8 +93,6 @@ pub fn do_if<C: Component>(
 
 #[must_use = "This is the only strong reference to this component, if this is dropped then nothing will work. consider using `fluent_web_runtime::forget` to leak its memory and keep it alive until the end of the program."]
 pub fn render_component<C: Component + 'static>(mount_point: impl Into<Box<str>>) -> Wrapped<C> {
-    log("Rendering component!");
-
     // WORKAROUND: bug in rust analyzer makes it see this type wrong
     // WORKAROUND: https://github.com/rust-lang/rust-analyzer/issues/5514
     let mount_point: Box<str> = mount_point.into();

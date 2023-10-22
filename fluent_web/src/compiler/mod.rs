@@ -36,18 +36,24 @@ pub fn compile_project() -> CompilerResult<()> {
     let src_fluent = root_dir.join("src_fluent");
     let src = root_dir.join("src");
 
-    clear_out_src_dir(&src)?;
+    clear_out_src_dir(&src_fluent, &src)?;
     process_dir(&src_fluent, &src)?;
 
     Ok(())
 }
 
 /// Clear out the src directory to stop compilation errors from stopping trunk.
-fn clear_out_src_dir(src: &PathBuf) -> CompilerResult<()> {
+fn clear_out_src_dir(fluent: &Path, src: &Path) -> CompilerResult<()> {
     fs::remove_dir_all(src)?;
     fs::create_dir_all(src)?;
 
-    fs::File::create(src.join("main.rs"))?;
+    let filename = if fluent.join("main.rs").exists() {
+        "main.rs"
+    } else {
+        "lib.rs"
+    };
+
+    fs::File::create(src.join(filename))?;
 
     Ok(())
 }
