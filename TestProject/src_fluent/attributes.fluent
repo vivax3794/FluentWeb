@@ -1,0 +1,90 @@
+<template>
+    <button id="BUTTON" :click="|_, _| *state = !*state"></button>
+    <div id="TAG" =A="*state" ?B="state.then_some(10)"></div>
+</template>
+
+<data>
+let mut state: bool = false;
+</data>
+
+<define>
+#[cfg(test)]
+pub mod tests {
+    use wasm_bindgen_test::*;
+    use crate::test_utils::html;
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    fn setup() -> web_sys::Document {
+        use fluent_web_runtime::{forget, render_component};
+
+        crate::test_utils::setup_dom();
+        forget(render_component!(super, crate::test_utils::MOUNT_POINT));
+        web_sys::window().unwrap().document().unwrap()
+    }
+
+    #[wasm_bindgen_test]
+    fn starting_value_computed() {
+        let document = setup();
+
+        let tag = document.get_element_by_id("TAG").unwrap();
+
+        assert_eq!(tag.get_attribute("A"), Some("false".to_owned()))
+    }
+
+    #[wasm_bindgen_test]
+    fn starting_value_conditional() {
+        let document = setup();
+
+        let tag = document.get_element_by_id("TAG").unwrap();
+
+        assert_eq!(tag.get_attribute("B"), None)
+    }
+
+    #[wasm_bindgen_test]
+    fn updated_value_computed() {
+        let document = setup();
+
+        let button = html(document.get_element_by_id("BUTTON").unwrap());
+        let tag = document.get_element_by_id("TAG").unwrap();
+
+        button.click();
+        assert_eq!(tag.get_attribute("A"), Some("true".to_owned()));
+
+        button.click();
+        assert_eq!(tag.get_attribute("A"), Some("false".to_owned()));
+    }
+
+    #[wasm_bindgen_test]
+    fn updated_value_conditional() {
+        let document = setup();
+
+        let button = html(document.get_element_by_id("BUTTON").unwrap());
+        let tag = document.get_element_by_id("TAG").unwrap();
+
+        button.click();
+        assert_eq!(tag.get_attribute("B"), Some("10".to_owned()));
+
+        button.click();
+        assert_eq!(tag.get_attribute("B"), None);
+    }
+
+    #[wasm_bindgen_test]
+    fn stress_test() {
+        let document = setup();
+
+        let button = html(document.get_element_by_id("BUTTON").unwrap());
+        let tag = document.get_element_by_id("TAG").unwrap();
+
+        for _ in 0..100_000 {
+            button.click();
+        };
+
+        button.click();
+        assert_eq!(tag.get_attribute("B"), Some("10".to_owned()));
+
+        button.click();
+        assert_eq!(tag.get_attribute("B"), None);
+    }
+}
+</define>

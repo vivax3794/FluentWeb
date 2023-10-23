@@ -1,0 +1,7 @@
+<template>
+    <div id="CHILD" :click="|_, _| self.emit(&click)"></div>
+</template>
+
+<events>
+pub struct click;
+</events>

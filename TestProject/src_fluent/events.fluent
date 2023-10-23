@@ -1,0 +1,51 @@
+<template>
+    <div id="NATIVE" :click="|_, _| *value += 1">{value}</div>
+    <component src="super::events_sub" ;click="|_| *value += 1"></component>
+</template>
+
+<data>
+let mut value: u8 = 0;
+</data>
+
+<define>
+#[cfg(test)]
+mod tests {
+    use wasm_bindgen_test::*;
+    use crate::test_utils::html;
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    fn setup() -> web_sys::Document {
+        use fluent_web_runtime::{forget, render_component};
+
+        crate::test_utils::setup_dom();
+        forget(render_component!(super, crate::test_utils::MOUNT_POINT));
+        web_sys::window().unwrap().document().unwrap()
+    }
+
+    #[wasm_bindgen_test]
+    fn native() {
+        let document = setup();
+        let tag = html(document.get_element_by_id("NATIVE").unwrap());
+
+        assert_eq!(tag.text_content().unwrap(), "0");
+        tag.click();
+        assert_eq!(tag.text_content().unwrap(), "1");
+        tag.click();
+        assert_eq!(tag.text_content().unwrap(), "2");
+    }
+
+    #[wasm_bindgen_test]
+    fn custom() {
+        let document = setup();
+        let tag = html(document.get_element_by_id("NATIVE").unwrap());
+        let child = html(document.get_element_by_id("CHILD").unwrap());
+
+        assert_eq!(tag.text_content().unwrap(), "0");
+        child.click();
+        assert_eq!(tag.text_content().unwrap(), "1");
+        child.click();
+        assert_eq!(tag.text_content().unwrap(), "2");
+    }
+}
+</define>

@@ -7,7 +7,8 @@ edition = "2021"
 
 [dependencies]
 fluent_web_runtime = { version = "*", path = "../fluent_web_runtime"}
-web-sys = { version = "0.3.64", features = ["Document", "Window", "Element", "HtmlElement"] }
+wasm-bindgen = "0.2.87"
+web-sys = { version = "0.3.64", features = ["Document", "Window", "Element", "HtmlElement", "CssStyleDeclaration"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

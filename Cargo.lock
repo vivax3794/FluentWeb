@@ -1880,6 +1880,7 @@ name = "test_project"
 version = "0.1.0"
 dependencies = [
  "fluent_web_runtime",
+ "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",
 ]

@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 
 use generics::Generics;
 use html5ever::tendril::TendrilSink;
+use miette::Context;
 use utils::find_top_level_tag;
 
 use crate::prelude::*;
@@ -86,6 +87,8 @@ fn process_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
         }
         Some("fluent") => {
             // This function should only be called with files
+            println!("COMPILING: {source:?}");
+
             #[allow(clippy::expect_used)]
             let component_name: &str = dst
                 .file_stem()

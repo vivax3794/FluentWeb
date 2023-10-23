@@ -1,0 +1,15 @@
+<template> 
+    <div class="DUPLICATE" id="CHILD"></div>
+    <div id="CHILD_VAR"></div>
+</template>
+
+<style>
+.DUPLICATE {
+    height: 20px;
+}
+
+#CHILD_VAR {
+    width: var(--width);
+}
+</style>
+
