@@ -236,7 +236,6 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
 
                 let component = self.weak();
                 let function = move |mutations: Vec<::fluent_web_runtime::internal::web_sys::MutationRecord>| {
-                   ::fluent_web_runtime::internal::log(&format!("CHECKING DROPPED STUFF"));
                     if let Some(comp) = component.clone().upgrade() {
                        let mut comp = comp.borrow_mut();
                        for mutation in mutations.into_iter() {
@@ -247,11 +246,8 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
                                    let mut stack = vec![element.clone()];
                                    while let Some(element) = stack.pop() {
                                        if let Some(id) = element.get_attribute("id") {
-                                           ::fluent_web_runtime::internal::log(&format!("{id:?}"));
                                            let sub = comp.subs.remove(&*id);
-                                           ::fluent_web_runtime::internal::log(&format!("DROPPING: {}", sub.is_some()));
                                            if let Some(sub) = sub {
-                                               ::fluent_web_runtime::internal::log(&format!("REFERENCES: {}", ::std::rc::Rc::strong_count(&sub)));
                                                drop(sub);
                                            }
                                        }
@@ -264,7 +260,6 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
                            }
                        }
                     }
-                   ::fluent_web_runtime::internal::log(&format!("DONE CHECKING"));
                 };
                 let function = ::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(Vec<::fluent_web_runtime::internal::web_sys::MutationRecord>)>::new(function);
                 let js_function = function.as_ref().unchecked_ref();
@@ -316,7 +311,6 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
 
         impl #{&generics.impl_generics} Drop for Component #{&generics.ty_generics} {
             fn drop(&mut self) {
-                ::fluent_web_runtime::internal::log("Droped component");
                 if let Some(obs) = self.obs.take() {
                     obs.disconnect();
                     drop(obs);

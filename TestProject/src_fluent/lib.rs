@@ -1,14 +1,16 @@
 pub mod attributes;
+pub mod attributes_sub;
 pub mod events;
 pub mod events_sub;
+pub mod ifs;
 pub mod simple_rendering;
 pub mod styling;
 pub mod styling_sub;
 
 #[cfg(test)]
 mod test_utils {
-    use fluent_web_runtime::internal::Component;
-    use fluent_web_runtime::{forget, render_component};
+    use fluent_web_runtime::forget;
+    use fluent_web_runtime::internal::{render_component, Component};
 
     pub const MOUNT_POINT: &str = "MOUNT";
 
@@ -23,6 +25,12 @@ mod test_utils {
         let mount_point = document.create_element("div").unwrap();
         mount_point.set_id(MOUNT_POINT);
         document.body().unwrap().append_child(&mount_point).unwrap();
+    }
+
+    pub fn setup<C: Component + 'static>() -> web_sys::Document {
+        setup_dom();
+        forget(render_component::<C>(crate::test_utils::MOUNT_POINT));
+        web_sys::window().unwrap().document().unwrap()
     }
 
     pub fn html(element: web_sys::Element) -> web_sys::HtmlElement {

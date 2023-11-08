@@ -6,6 +6,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::rc::{Rc, Weak};
 
+use ::std::format;
 pub use derivative::Derivative;
 use wasm_bindgen::JsCast;
 pub use {base64, bincode, js_sys, serde, wasm_bindgen, web_sys};
@@ -130,7 +131,7 @@ pub fn uuid() -> Box<str> {
 
 #[must_use]
 pub fn get_by_id(id: &str) -> web_sys::Element {
-    let selector = ::std::format!("#{id}");
+    let selector = format!("#{id}");
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     document.query_selector(&selector).unwrap().unwrap()
@@ -139,7 +140,7 @@ pub fn get_by_id(id: &str) -> web_sys::Element {
 #[must_use]
 pub fn get_element(component_id: &str, element_id: &str) -> web_sys::Element {
     let selector =
-        ::std::format!("#{component_id} #{element_id}:not(#{component_id} .__Fluent_Component *)");
+        format!("#{component_id} #{element_id}:not(#{component_id} .__Fluent_Component *)");
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     document.query_selector(&selector).unwrap().unwrap()
@@ -152,13 +153,13 @@ pub fn get_elements(
     selector: &str,
     root_selector: Option<&str>,
 ) -> Vec<web_sys::Element> {
-    let selector = ::std::format!(
-        "#{} {} {}:not(#{} .__Fluent_Component *)",
-        component_id,
-        root_selector.map(|s| format!(".{s}")).unwrap_or_default(),
-        selector,
-        component_id
-    );
+    let selector = if let Some(root_selector) = root_selector {
+        format!(
+            "#{component_id} .{root_selector}{selector}:not(#{component_id} .__Fluent_Component *),#{component_id} .{root_selector} {selector}:not(#{component_id} .__Fluent_Component *)",
+        )
+    } else {
+        format!("#{component_id} {selector}:not(#{component_id} .__Fluent_Component *)",)
+    };
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let node_list = document.query_selector_all(&selector).unwrap();

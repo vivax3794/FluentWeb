@@ -1,0 +1,7 @@
+<template>
+    <div id="SUB">{prop}</div>
+</template>
+
+<props>
+let mut prop: u32 = 0;
+</props>

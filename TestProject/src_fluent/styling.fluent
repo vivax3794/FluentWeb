@@ -34,17 +34,9 @@ let mut value: u8 = 10;
 #[cfg(test)]
 mod tests {
     use wasm_bindgen_test::*;
-    use crate::test_utils::html;
+    use crate::test_utils::{html, setup};
 
     wasm_bindgen_test_configure!(run_in_browser);
-
-    fn setup() -> web_sys::Document {
-        use fluent_web_runtime::{forget, render_component};
-
-        crate::test_utils::setup_dom();
-        forget(render_component!(super, crate::test_utils::MOUNT_POINT));
-        web_sys::window().unwrap().document().unwrap()
-    }
 
     fn get_style(element: &web_sys::Element) -> web_sys::CssStyleDeclaration {
         let window = web_sys::window().unwrap();
@@ -53,7 +45,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn simple() {
-        let document = setup();
+        let document = setup::<super::Component>();
         let tag = document.get_element_by_id("SIMPLE").unwrap();
 
         assert_eq!(get_style(&tag).get_property_value("width").unwrap(), "10px");
@@ -61,7 +53,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn static_var() {
-        let document = setup();
+        let document = setup::<super::Component>();
         let tag = document.get_element_by_id("STATIC_VAR").unwrap();
 
         assert_eq!(get_style(&tag).get_property_value("width").unwrap(), "10px");
@@ -69,7 +61,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn dynamic_var() {
-        let document = setup();
+        let document = setup::<super::Component>();
         let button = html(document.get_element_by_id("DYNAMIC_VAR").unwrap());
 
         assert_eq!(get_style(&button).get_property_value("width").unwrap(), "10px");
@@ -81,7 +73,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_scope() {
-        let document = setup();
+        let document = setup::<super::Component>();
         let parent = document.get_element_by_id("PARENT").unwrap();
         let child = document.get_element_by_id("CHILD").unwrap();
 
@@ -94,7 +86,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn var_from_parent() {
-        let document = setup();
+        let document = setup::<super::Component>();
         let tag = document.get_element_by_id("CHILD_VAR").unwrap();
 
         assert_eq!(get_style(&tag).get_property_value("width").unwrap(), "10px");
