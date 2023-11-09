@@ -1,8 +1,0 @@
-<template>
-    CONTAIN
-    <div id="TARGET">{*value * 2}</div>
-</template>
-
-<data>
-let mut value: i32 = 2;
-</data>

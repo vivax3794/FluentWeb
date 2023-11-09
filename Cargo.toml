@@ -1,4 +1,4 @@
 [workspace]
 
-members = ["fluent_web", "fluent_web_runtime", "TestProject", "tests/*"]
+members = ["fluent_web", "fluent_web_runtime", "TestProject"]
 resolver = "2"

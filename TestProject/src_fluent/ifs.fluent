@@ -8,6 +8,10 @@
         <button id="SE_BUTTON" :click="|_, element| *event_value += 1">{event_value}</button>
     </div>
     <div $if="*value" id="E" :click="|_, element| *event_value += 1">{event_value}</div>
+    <div id="SI" $if="*value"><component src="super::if_sub"></component></div>
+    <div id="SD">
+        <component src="super::if_sub" $if="*value"></component>
+    </div>
 </template>
 
 <data>
@@ -75,6 +79,25 @@ pub mod tests {
         assert_eq!(div.text_content().unwrap().trim(), "0");
         div.click();
         assert_eq!(div.text_content().unwrap().trim(), "1");
+    }
+
+    #[wasm_bindgen_test]
+    fn subcomponent_internal() {
+        let document = setup::<super::Component>();
+        let button = html(document.get_element_by_id("BUTTON").unwrap());
+
+        button.click();
+        assert!(document.query_selector("#SI #SUB").unwrap().is_some(), "Sub component did not exsist");
+    }
+
+    #[wasm_bindgen_test]
+    fn subcomponent_direct() {
+        let document = setup::<super::Component>();
+        let button = html(document.get_element_by_id("BUTTON").unwrap());
+
+        assert!(document.query_selector("#SD #SUB").unwrap().is_none(), "Sub component did exsist");
+        button.click();
+        assert!(document.query_selector("#SD #SUB").unwrap().is_some(), "Sub component did not exsist");
     }
 }
 </define>

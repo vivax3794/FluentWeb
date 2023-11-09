@@ -1,7 +1,0 @@
-<template>
-    <button id="SUB_TARGET" :click="|event, element| self.emit(&click(10))"></button>
-</template>
-
-<events>
-pub struct click(pub i32);
-</events>

@@ -2,6 +2,7 @@ pub mod attributes;
 pub mod attributes_sub;
 pub mod events;
 pub mod events_sub;
+pub mod if_sub;
 pub mod ifs;
 pub mod simple_rendering;
 pub mod styling;

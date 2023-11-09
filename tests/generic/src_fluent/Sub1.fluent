@@ -1,7 +1,0 @@
-<generic>
-<T: Default + DomDisplay + 'static>
-</generic>
-
-<template>
-    {T::default()}
-</template>
