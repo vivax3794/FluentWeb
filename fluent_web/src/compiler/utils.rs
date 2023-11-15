@@ -29,7 +29,7 @@ pub fn add_class(attributes: &mut kuchikiki::Attributes, class: &str) {
         value
     } else {
         attributes.insert("class", String::new());
-        #[allow(clippy::expect_used)]
+        #[expect(clippy::expect_used, reason = "We just inserted the class")]
         attributes
             .get_mut("class")
             .expect("Newly inserted class to be there")
@@ -133,7 +133,10 @@ pub fn modify_html(node: &kuchikiki::NodeRef, prefix: &str) -> Vec<ModifiedHtmlI
                             attributes.remove(name.clone());
 
                             // The filter has made sure this is safe
-                            #[allow(clippy::expect_used)]
+                            #[expect(
+                                clippy::expect_used,
+                                reason = "We already know the prefix is used"
+                            )]
                             let name = name
                                 .strip_prefix(prefix)
                                 .expect("Name to start with ?")

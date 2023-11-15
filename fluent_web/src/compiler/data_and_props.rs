@@ -117,6 +117,10 @@ pub fn compile_unwraps(data_statements: &[DataStatement]) -> Unwraps {
 }
 
 /// Create a macro to unpack a ident as the current component
+#[expect(
+    unused_variables,
+    reason = "This is going to be used in a future refactor"
+)]
 pub fn compile_unwrap_macro(data_statements: &[DataStatement]) -> proc_macro2::TokenStream {
     quote!(
         macro_rules! unpack {
@@ -184,9 +188,9 @@ pub fn compile_reactive_function_struct(
     quote!(
         #[derive(::fluent_web_runtime::internal::Derivative)]
         #[derivative(Default(bound = ""))]
-        struct __Fluid_Reactive_Functions #{&generics.impl_generics} #{&generics.where_clauses} {
+        struct __Fluid_Reactive_Functions #{&generics.impl_vars} #{&generics.where_clauses} {
            #(for field in data) {
-                #{&field.target}: ::std::collections::HashSet<(fn(&mut Component #{&generics.ty_generics}, Option<&str>), bool)>,
+                #{&field.target}: ::std::collections::HashSet<(fn(&mut Component #{&generics.ty_vars}, Option<&str>), bool)>,
            }
             _p: #{&generics.phantom}
         }
@@ -220,7 +224,7 @@ pub fn compile_detect_reads(
     unwraps: &Unwraps,
 ) -> proc_macro2::TokenStream {
     quote!(
-        fn detect_reads(&mut self, f: fn(&mut Component #{&generics.ty_generics}, Option<&str>)) {
+        fn detect_reads(&mut self, f: fn(&mut Component #{&generics.ty_vars}, Option<&str>)) {
             #{&unwraps.unpack_change_detector}
             #(for field in data) {
                 if #{&field.target}.was_read() {
@@ -229,7 +233,7 @@ pub fn compile_detect_reads(
                 }
             }
         }
-        fn detect_reads_ifs(&mut self, f: fn(&mut Component #{&generics.ty_generics}, Option<&str>)) {
+        fn detect_reads_ifs(&mut self, f: fn(&mut Component #{&generics.ty_vars}, Option<&str>)) {
             #{&unwraps.unpack_change_detector}
             #(for field in data) {
                 if #{&field.target}.was_read() {
@@ -251,7 +255,7 @@ pub fn compile_update_changed_values(
         fn update_changed_values(&mut self) {
             #{&unwraps.unpack_change_detector}
 
-            let mut __Fluent_Functions: ::std::vec::Vec<(fn(&mut Component #{&generics.ty_generics}, Option<&str>), bool)> = ::std::vec::Vec::new();
+            let mut __Fluent_Functions: ::std::vec::Vec<(fn(&mut Component #{&generics.ty_vars}, Option<&str>), bool)> = ::std::vec::Vec::new();
 
             #(for field in data) {
                 if #{&field.target}.was_written() {__Fluent_Functions.extend(self.updates.#{&field.target}.iter());}

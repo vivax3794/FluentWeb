@@ -32,7 +32,7 @@ fn compile_events_internal(
                 )]
                 #[serde(crate="::fluent_web_runtime::internal::serde")]
                 #event
-                impl #{&generics.impl_generics} ::fluent_web_runtime::internal::Event for #{&event.ident} #used_generics {
+                impl #{&generics.impl_vars} ::fluent_web_runtime::internal::Event for #{&event.ident} #used_generics {
                     const NAME: &'static str = #{event.ident.to_string()};
                 }
             }
@@ -45,8 +45,8 @@ fn compile_events_internal(
                         ::fluent_web_runtime::internal::serde::Deserialize
                     )]
                     #[serde(crate="::fluent_web_runtime::internal::serde")]
-                    pub struct #{&event.ident} #{&generics.ty_generics} (pub super::#{&event.ident} #used_generics, pub #{&generics.phantom});
-                    impl #{&generics.ty_generics} ::fluent_web_runtime::internal::EventWrapper for #{&event.ident} #{&generics.ty_generics} #{&generics.where_clauses} {
+                    pub struct #{&event.ident} #{&generics.ty_vars} (pub super::#{&event.ident} #used_generics, pub #{&generics.phantom});
+                    impl #{&generics.ty_vars} ::fluent_web_runtime::internal::EventWrapper for #{&event.ident} #{&generics.ty_vars} #{&generics.where_clauses} {
                         type Real = super::#{&event.ident} #used_generics;
                     }
                 }

@@ -83,23 +83,3 @@ pub fn compile(html: &kuchikiki::NodeRef) -> CompilerResult<Vec<DefCallPair>> {
     let nodes = find_subcomponents(html)?;
     Ok(nodes.into_iter().map(compile_stmt).collect())
 }
-
-/// Convert a module path with generics into a compoent path
-///
-/// # Example
-/// `Test::App<u8>` -> `Test::App::Component<u8>`
-fn get_component_path(path: syn::Path) -> CompilerResult<proc_macro2::TokenStream> {
-    let mut segments = path.segments.into_iter();
-    let last = segments
-        .next_back()
-        .ok_or_else(|| Compiler::WrongSyntax("Invalid component path"))?;
-    let mut segments = segments.map(|p| quote!(#p)).collect::<Vec<_>>();
-
-    let syn::PathSegment {
-        ident, arguments, ..
-    } = last;
-    segments.push(quote!(#ident));
-
-    // WORKAROUND: template_quote does not support longer than 1 seperators
-    Ok(quote::quote!(#(#segments)::*::Component::#arguments))
-}

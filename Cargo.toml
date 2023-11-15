@@ -1,4 +1,5 @@
 [workspace]
 
 members = ["fluent_web", "fluent_web_runtime", "TestProject"]
+default-members = ["fluent_web", "fluent_web_runtime"]
 resolver = "2"

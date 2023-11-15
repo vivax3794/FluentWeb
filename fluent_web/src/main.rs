@@ -1,4 +1,5 @@
 #![feature(box_patterns)]
+#![feature(lint_reasons)]
 #![warn(
     clippy::pedantic,
     clippy::clone_on_ref_ptr,
@@ -21,7 +22,8 @@
     clippy::unneeded_field_pattern,
     clippy::use_debug,
     clippy::verbose_file_reads,
-    clippy::expect_used
+    clippy::expect_used,
+    clippy::allow_attributes
 )]
 #![deny(
     clippy::unwrap_used,

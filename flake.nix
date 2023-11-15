@@ -3,43 +3,40 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }@inputs:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       let
+        overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {
-          inherit system;
-          overlays = [];
+          inherit system overlays;
         };
-      in {
-        devShell = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            rustc
-            cargo
-            clippy
-          ];
+      in
+      with pkgs;
+      {
+        devShells.default = mkShell {
+            buildInputs = [
+                ( rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
+                    extensions = ["rust-analyzer" "rust-src" "llvm-tools-preview"];
+                    targets = ["wasm32-unknown-unknown"];
+                }) )
+
+                # TESTs
+                cargo-nextest
+
+                # WASM TESTS
+                wasm-pack
+                chromium
+                firefox
+                chromedriver
+
+                # COVERAGE
+                glibc_multi
+            ];
         };
-
-        packages.default = pkgs.stdenv.mkDerivation {
-          pname = "fluent_web";
-          version = "0.0.1";
-          src =  ./.;
-
-          buildInputs = with pkgs; [rustc cargo];
-          doCheck = true;
-          checkPhase = "bash test.sh";
-          buildPhase = "";
-          installPhase = "";
-        };
-
-        defaultPackage = self.packages.${system}.default;
-
-        apps.default = {
-          type = "app";
-          program = "${self.packages.${system}.default}/bin/test";
-        };
-      }
+    }
     );
 }

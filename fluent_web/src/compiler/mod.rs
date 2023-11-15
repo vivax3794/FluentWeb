@@ -18,7 +18,6 @@ use std::path::{Path, PathBuf};
 
 use generics::Generics;
 use html5ever::tendril::TendrilSink;
-use miette::Context;
 use utils::find_top_level_tag;
 
 use crate::prelude::*;
@@ -86,10 +85,7 @@ fn process_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             fs::copy(source, dst)?;
         }
         Some("fluent") => {
-            // This function should only be called with files
-            println!("COMPILING: {source:?}");
-
-            #[allow(clippy::expect_used)]
+            #[expect(clippy::expect_used, reason = "This should only be called with files.")]
             let component_name: &str = dst
                 .file_stem()
                 .expect("Expected file")
@@ -118,8 +114,10 @@ fn get_html_body(source_content: &str) -> CompilerResult<kuchikiki::NodeRef> {
     .from_utf8()
     .read_from(&mut template_content.as_bytes())?;
 
-    // We know these are valid
-    #[allow(clippy::expect_used)]
+    #[expect(
+        clippy::expect_used,
+        reason = "'body' is a valid tag selector, and the parsed html will always have a inserted body element"
+    )]
     Ok(parsed_html
         .select("body")
         .expect("A valid selector")
@@ -127,6 +125,21 @@ fn get_html_body(source_content: &str) -> CompilerResult<kuchikiki::NodeRef> {
         .expect("There to be a <body> tag")
         .as_node()
         .clone())
+}
+
+/// Compile Component struct
+fn compile_component_struct(generics: &Generics) -> proc_macro2::TokenStream {
+    quote!(
+    pub struct Component #{&generics.generic_def} {
+        root_name: Box<str>,
+        data: __Fluid_Data #{&generics.ty_vars},
+        updates: __Fluid_Reactive_Functions #{&generics.ty_vars},
+        subs: ::std::collections::HashMap<Box<str>, ::std::rc::Rc<dyn std::any::Any>>,
+        weak: ::std::option::Option<::fluent_web_runtime::internal::WeakRef<Component #{&generics.ty_vars}>>,
+        obs: Option<::fluent_web_runtime::internal::web_sys::MutationObserver>,
+        _f:  Option<::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(Vec<::fluent_web_runtime::internal::web_sys::MutationRecord>)>>
+    }
+    )
 }
 
 /// Compiler a fluent file to a rust file, this is the main block of code
@@ -144,7 +157,7 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
         false,
     )?;
     data_statements.extend(prop_statements.clone());
-    let data = data_and_props::compile_unwraps(&data_statements);
+    let unwraps = data_and_props::compile_unwraps(&data_statements);
 
     let define_parsed: syn::File =
         syn::parse_str(find_top_level_tag(&source_content, "define").unwrap_or(""))?;
@@ -156,17 +169,18 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
     let body_html = get_html_body(&source_content)?;
 
     let mut reactive_pairs = vec![];
-    reactive_pairs.extend(reactive_text::compile(&body_html, &data)?);
-    reactive_pairs.extend(conditional_attr::compile(&body_html, &data)?);
-    reactive_pairs.extend(computed_attribute::compile(&body_html, &data)?);
-    reactive_pairs.extend(style::compile(&body_html, &data)?);
+    reactive_pairs.extend(reactive_text::compile(&body_html, &unwraps)?);
+    reactive_pairs.extend(conditional_attr::compile(&body_html, &unwraps)?);
+    reactive_pairs.extend(computed_attribute::compile(&body_html, &unwraps)?);
+    reactive_pairs.extend(style::compile(&body_html, &unwraps)?);
 
     let mut once_pairs = vec![];
     once_pairs.extend(subcomponent::compile(&body_html)?);
-    once_pairs.extend(event_listen::compile(&body_html, &data)?);
-    //
+    once_pairs.extend(event_listen::compile(&body_html, &unwraps)?);
+
     // Important that this is last
-    reactive_pairs.extend(ifs::compile(&body_html, &data)?);
+    // TODO: This is gonna be a issue when we get to loops and multiple types of ifs.
+    reactive_pairs.extend(ifs::compile(&body_html, &unwraps)?);
 
     let (reactive_defs, reactive_calls): (Vec<_>, Vec<_>) = reactive_pairs
         .into_iter()
@@ -184,43 +198,26 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
         html5ever::serialize::SerializeOpts::default(),
     )?;
     let mut html_content = String::from_utf8(html_content)?;
-
     html_content +=
         &style::transform_css(find_top_level_tag(&source_content, "style").unwrap_or(""))?;
 
     let component_source = quote!(
         // @generated
         #![allow(warnings)]
-        use ::fluent_web_runtime::internal::web_sys::*;
-        use ::fluent_web_runtime::internal::DomDisplay;
-        use ::fluent_web_runtime::internal::UseInEvent;
-        use ::fluent_web_runtime::internal::Component as __Fluent_Comp_Trait;
-        use ::fluent_web_runtime::CompRef;
+        use ::fluent_web_runtime::{CompRef, internal::{web_sys::*, DomDisplay, UseInEvent, Component as __Fluent_Comp_Trait}};
 
         #{ data_and_props::compile_unwrap_macro(&data_statements) }
-
         #define_parsed
-
         #{ data_and_props::compile_data_struct(&data_statements, &generics) }
         #{ data_and_props::compile_reactive_function_struct(&data_statements, &generics) }
+        #{ compile_component_struct(&generics) }
+        #{ custom_events::compile_events(&source_content, &generics)? }
 
-        pub struct Component #{&generics.generic_def} {
-            root_name: Box<str>,
-            data: __Fluid_Data #{&generics.ty_generics},
-            updates: __Fluid_Reactive_Functions #{&generics.ty_generics},
-            subs: ::std::collections::HashMap<Box<str>, ::std::rc::Rc<dyn std::any::Any>>,
-            weak: ::std::option::Option<::fluent_web_runtime::internal::WeakRef<Component #{&generics.ty_generics}>>,
-            obs: Option<::fluent_web_runtime::internal::web_sys::MutationObserver>,
-            _f:  Option<::fluent_web_runtime::internal::wasm_bindgen::closure::Closure::<dyn Fn(Vec<::fluent_web_runtime::internal::web_sys::MutationRecord>)>>
-        }
-
-        #{custom_events::compile_events(&source_content, &generics)?}
-
-        impl #{&generics.impl_generics} Component #{&generics.ty_generics} #{&generics.where_clauses} {
+        impl #{&generics.impl_vars} Component #{&generics.ty_vars} #{&generics.where_clauses} {
             #(#reactive_defs)*
             #(#once_defs)*
 
-            #{data_and_props::compile_detect_reads(&data_statements, &generics, &data)}
+            #{data_and_props::compile_detect_reads(&data_statements, &generics, &unwraps)}
 
             fn emit<E: ::fluent_web_runtime::internal::Event>(&self, event: &E) {
                 ::fluent_web_runtime::internal::emit(&self.root_name, event);
@@ -230,7 +227,7 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             }
         }
 
-        impl #{&generics.impl_generics} ::fluent_web_runtime::internal::Component for Component #{&generics.ty_generics} #{&generics.where_clauses} {
+        impl #{&generics.impl_vars} ::fluent_web_runtime::internal::Component for Component #{&generics.ty_vars} #{&generics.where_clauses} {
             fn setup_watcher(&mut self) {
                 use ::fluent_web_runtime::internal::wasm_bindgen::JsCast;
 
@@ -290,7 +287,7 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
                 self.weak = Some(weak);
             }
 
-            #{data_and_props::compile_update_changed_values(&data_statements, &generics, &data)}
+            #{data_and_props::compile_update_changed_values(&data_statements, &generics, &unwraps)}
             #{data_and_props::compile_update_props(&prop_statements)}
 
             fn setup_onetime(&mut self, root: Option<&str>) {
@@ -303,13 +300,13 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
             }
 
             fn setup(&mut self) {
-                #{&data.unpack_mut}
+                #{&unwraps.unpack_mut}
                 #setup_parsed
                 self.update_changed_values();
             }
         }
 
-        impl #{&generics.impl_generics} Drop for Component #{&generics.ty_generics} {
+        impl #{&generics.impl_vars} Drop for Component #{&generics.ty_vars} {
             fn drop(&mut self) {
                 if let Some(obs) = self.obs.take() {
                     obs.disconnect();

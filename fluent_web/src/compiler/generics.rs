@@ -6,9 +6,9 @@ use crate::prelude::*;
 /// Generic component fields
 pub struct Generics {
     /// Tokens that should go after impl
-    pub impl_generics: proc_macro2::TokenStream,
+    pub impl_vars: proc_macro2::TokenStream,
     /// Tokens that go after a ident
-    pub ty_generics: proc_macro2::TokenStream,
+    pub ty_vars: proc_macro2::TokenStream,
     /// The where clauses
     pub where_clauses: proc_macro2::TokenStream,
     /// The tokens used when defining a struct
@@ -23,8 +23,8 @@ pub fn parse(source_content: &str) -> CompilerResult<Generics> {
 
     match generic_content {
         None => Ok(Generics {
-            impl_generics: quote!(),
-            ty_generics: quote!(),
+            impl_vars: quote!(),
+            ty_vars: quote!(),
             where_clauses: quote!(),
             generic_def: quote!(),
             phantom: quote!(::std::marker::PhantomData<()>),
@@ -50,8 +50,8 @@ pub fn parse(source_content: &str) -> CompilerResult<Generics> {
                 .collect::<Vec<_>>();
 
             Ok(Generics {
-                impl_generics: quote!(#impl_generic),
-                ty_generics: quote!(#ty_generics),
+                impl_vars: quote!(#impl_generic),
+                ty_vars: quote!(#ty_generics),
                 where_clauses: quote!(#where_clauses),
                 generic_def: quote!(#generics #where_clauses),
                 phantom: quote!(::std::marker::PhantomData<(#(#phantom_args),*)>),
