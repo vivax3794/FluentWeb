@@ -212,3 +212,49 @@ pub fn modify_html_code<T: syn::parse::Parse, S: GetSrc>(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    prop_compose! {
+        fn not_tag_chars()(s in "[^</>]*") -> String {
+            s
+        }
+    }
+    prop_compose! {
+        fn tag_and_content()(tag in not_tag_chars(), start in not_tag_chars(), inner in not_tag_chars(), outer in not_tag_chars()) -> (String, String, String) {
+            (tag.clone(), format!("{start}<{tag}>{inner}</{tag}>{outer}"), inner)
+        }
+    }
+    prop_compose! {
+        fn tag_and_content_missing_end()(tag in not_tag_chars(), start in not_tag_chars(), outer in not_tag_chars()) -> (String, String) {
+            (tag.clone(), format!("{start}<{tag}>{outer}"))
+        }
+    }
+
+    proptest! {
+        #[test]
+        #[expect(unused_must_use, reason="We only care that it doesnt panic")]
+        fn find_tag_doesnt_crash(tag in ".*", content in ".*") {
+            find_top_level_tag(&content, &tag);
+        }
+
+        #[test]
+        fn finds_tag_in_content((tag, content, inner) in tag_and_content()) {
+            assert_eq!(find_top_level_tag(&content, &tag), Some(inner.as_str()));
+        }
+
+        #[test]
+        fn finds_only_start((tag, content) in tag_and_content_missing_end()) {
+            assert_eq!(find_top_level_tag(&content, &tag), None);
+        }
+    }
+
+    #[test]
+    fn test_id_should_be_uniqe() {
+        assert_ne!(uuid(), uuid());
+    }
+}

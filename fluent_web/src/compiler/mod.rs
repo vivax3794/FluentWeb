@@ -102,8 +102,10 @@ fn process_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
 }
 
 /// Get the html of a template.
-fn get_html_body(source_content: &str) -> CompilerResult<kuchikiki::NodeRef> {
+fn get_html_body(source_content: &str) -> kuchikiki::NodeRef {
     let template_content = find_top_level_tag(source_content, "template").unwrap_or("");
+
+    #[expect(clippy::expect_used, reason = "Rust strings are always utf-8")]
     let parsed_html = kuchikiki::parse_html_with_options(kuchikiki::ParseOpts {
         tree_builder: html5ever::tree_builder::TreeBuilderOpts {
             drop_doctype: true,
@@ -112,19 +114,20 @@ fn get_html_body(source_content: &str) -> CompilerResult<kuchikiki::NodeRef> {
         ..Default::default()
     })
     .from_utf8()
-    .read_from(&mut template_content.as_bytes())?;
+    .read_from(&mut template_content.as_bytes())
+    .expect("Rust strings are always utf-8");
 
     #[expect(
         clippy::expect_used,
         reason = "'body' is a valid tag selector, and the parsed html will always have a inserted body element"
     )]
-    Ok(parsed_html
+    parsed_html
         .select("body")
         .expect("A valid selector")
         .next()
         .expect("There to be a <body> tag")
         .as_node()
-        .clone())
+        .clone()
 }
 
 /// Compile Component struct
@@ -166,7 +169,7 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
         find_top_level_tag(&source_content, "setup").unwrap_or("")
     ))?;
 
-    let body_html = get_html_body(&source_content)?;
+    let body_html = get_html_body(&source_content);
 
     let mut reactive_pairs = vec![];
     reactive_pairs.extend(reactive_text::compile(&body_html, &unwraps)?);
@@ -321,4 +324,23 @@ fn compile_fluent_file(source: PathBuf, dst: PathBuf) -> CompilerResult<()> {
     fs::write(dst, component_source)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn parse_html_doesnt_crash(s in ".*") {
+            get_html_body(&s);
+        }
+
+        #[test]
+        fn parse_html_doesnt_crash_with_template(s in "<template>.*</template>") {
+            get_html_body(&s);
+        }
+    }
 }

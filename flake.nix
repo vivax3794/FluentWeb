@@ -20,11 +20,13 @@
         devShells.default = mkShell {
             buildInputs = [
                 ( rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
-                    extensions = ["rust-analyzer" "rust-src" "llvm-tools-preview"];
+                    extensions = ["rust-src" "llvm-tools-preview"];
                     targets = ["wasm32-unknown-unknown"];
                 }) )
+                rust-analyzer
+                mold
 
-                # TESTs
+                # TESTS
                 cargo-nextest
 
                 # WASM TESTS
@@ -34,6 +36,7 @@
                 chromedriver
 
                 # COVERAGE
+                cargo-llvm-cov
                 glibc_multi
             ];
         };
